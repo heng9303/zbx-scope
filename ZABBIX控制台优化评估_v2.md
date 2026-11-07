@@ -1,7 +1,7 @@
 # ZABBIX 运维控制台 · 需求梳理与优化评估（v2）
 
 > 评估基准：当前 `real/` 版本（8.0 实测可用，只读代理 127.0.0.1:8770）
-> 补充实测：本次新增只读探测（graph.get / item.get / host.get / problem.get），以下数字均为 10.51.26.102 实际返回
+> 补充实测：本次新增只读探测（graph.get / item.get / host.get / problem.get），以下数字均为 ZBX8_HOST 实际返回
 > 结论口径：不改 Zabbix 源码、不写源数据；前端仍是同域独立 SPA
 
 ---

@@ -2,7 +2,7 @@
   "_说明": "把本对象追加到 config.json 的 profiles 数组，然后把 id 填进页面顶栏的实例选择。Zabbix 4.0 没有 API Token，只能用只读账号登录；代理会自动 user.login 换 sessionid，并在会话过期时重登一次。",
   "id": "zbx4",
   "label": "老版本 4.0",
-  "upstream": "http://10.51.26.104/api_jsonrpc.php",
+  "upstream": "http://EXAMPLE_ZBX4_HOST/api_jsonrpc.php",
   "auth": "login",
   "user": "readonly",
   "password": "请替换为只读账号密码"

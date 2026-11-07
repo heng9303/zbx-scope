@@ -16,7 +16,7 @@ python3 server.py          # 只读代理，默认 127.0.0.1:8770
 ```
 
 打开 <http://127.0.0.1:8770/?profile=zbx7>；
-**已部署的远程开发环境**直接访问 <http://10.51.67.93:8770/>（内网直连，无需隧道）。
+**已部署的远程开发环境**直接访问 `http://DEPLOY_HOST:8770/`（真实地址按不入库的 `docs/.local-addresses.md` 还原，内网直连，无需隧道）。
 
 无需 pip install、无需 npm install、无需构建。凭据在 `real/config.json`。
 
@@ -83,9 +83,9 @@ python3 server.py          # 只读代理，默认 127.0.0.1:8770
 
 | 实例 | 版本 | 认证 | 状态 |
 |---|---|---|---|
-| `zbx8` 生产 `10.51.26.102` | 8.0.0 | Token | ⏸ **测试环境临时下线**，配置保留为 `enabled=false`，恢复后改回 `true` 重启即可 |
-| `zbx7` 测试 `10.51.26.103` | **7.0.32** | Token | ✅ 冒烟 20/20；仅 2 台主机（Zabbix server + 11.28），`11.28` 温湿度采集正常 |
-| `zbx4` 测试 `10.51.31.201` | 4.0.50 | `login`（test） | ✅ 冒烟 20/20；157 主机 / 112 问题 |
+| `zbx8` 生产 `ZBX8_HOST` | 8.0.0 | Token | ⏸ **测试环境临时下线**，配置保留为 `enabled=false`，恢复后改回 `true` 重启即可 |
+| `zbx7` 测试 `ZBX7_HOST` | **7.0.32** | Token | ✅ 冒烟 20/20；仅 2 台主机（Zabbix server + 11.28），`11.28` 温湿度采集正常 |
+| `zbx4` 测试 `ZBX4_HOST` | 4.0.50 | `login`（test） | ✅ 冒烟 20/20；157 主机 / 112 问题 |
 
 4.0 的两个坑（`auth` 必须放请求根级、账号是 `test` 不是 `Admin`）
 见 [05-部署与运维](05-部署与运维.md) 第九节与 [02-API契约](02-API契约与版本适配.md) 坑 #10。
@@ -98,9 +98,9 @@ python3 server.py          # 只读代理，默认 127.0.0.1:8770
 ```bash
 node --check real/public/js/app.js                                     # 语法
 export BASIC_AUTH='<user:password>'                                    # 远程启用了 Basic Auth
-node real/tests/ui-smoke.mjs zbx4 http://10.51.67.93:8770            # 断言冒烟（20 项，含只读闸门）
-BASE=http://10.51.67.93:8770 node real/tests/responsive.mjs zbx7 10683  # 窄屏五档
-BASE=http://10.51.67.93:8770 node real/tests/shots.mjs zbx4 10084        # 整页截图
+node real/tests/ui-smoke.mjs zbx4 http://DEPLOY_HOST:8770            # 断言冒烟（20 项，含只读闸门）
+BASE=http://DEPLOY_HOST:8770 node real/tests/responsive.mjs zbx7 10683  # 窄屏五档
+BASE=http://DEPLOY_HOST:8770 node real/tests/shots.mjs zbx4 10084        # 整页截图
 ```
 
 测试脚本已给 Chrome 加 `--no-proxy-server`，本机有企业代理也能直连内网 IP。

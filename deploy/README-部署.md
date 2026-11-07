@@ -8,12 +8,12 @@
 ## 一、先确认一件事：服务器能访问 Zabbix
 
 这是唯一可能让整个部署白做的环节。镜像构建、容器启动都不会报错，
-但页面打开是空的 —— 因为容器连不到 `10.51.26.102` 这类内网地址。
+但页面打开是空的 —— 因为容器连不到 `ZBX8_HOST` 这类内网地址。
 
 **在 Docker 服务器上执行：**
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://10.51.26.102/api_jsonrpc.php
+curl -s -o /dev/null -w '%{http_code}\n' http://ZBX8_HOST/api_jsonrpc.php
 ```
 
 - 返回 `200`/`405`/`412` → 通，继续
@@ -23,7 +23,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://10.51.26.102/api_jsonrpc.php
 
 ```bash
 docker run --rm python:3.12-alpine \
-  python -c "import urllib.request;print(urllib.request.urlopen('http://10.51.26.102/api_jsonrpc.php',timeout=6).status)"
+  python -c "import urllib.request;print(urllib.request.urlopen('http://ZBX8_HOST/api_jsonrpc.php',timeout=6).status)"
 ```
 
 如果宿主机通、容器不通，把 `docker-compose.yml` 里加一行 `network_mode: host`
@@ -100,7 +100,7 @@ rsync -av --delete \
 
 ## 四、访问方式（三选一）
 
-当前实际部署（10.51.67.93 开发环境）采用 **a) 内网直连**：
+当前实际部署（DEPLOY_HOST 开发环境）采用 **a) 内网直连**：
 `${ZBX_HOST_BIND:-0.0.0.0}:8770:8770`。**这个工具没有内置认证**，
 任何能访问端口的人都能看到全部监控数据（含主机名、IP、告警详情），
 因此只适合可信内网/开发环境。按场景选：
@@ -109,7 +109,7 @@ rsync -av --delete \
 
 ```bash
 # 浏览器直接打开（本机需绕过企业代理，或在代理白名单里加该 IP）
-http://10.51.67.93:8770/
+http://DEPLOY_HOST:8770/
 ```
 
 零隧道、开箱即用。收紧到仅本机：`ZBX_HOST_BIND=127.0.0.1 docker compose up -d`。
@@ -146,7 +146,7 @@ ports:
 改完必须配防火墙白名单：
 
 ```bash
-sudo ufw allow from 10.51.0.0/16 to any port 8770
+sudo ufw allow from INTRANET_CIDR to any port 8770
 ```
 
 ---
@@ -303,14 +303,14 @@ nginx 默认 `proxy_read_timeout 60s`。查 30 天数据时 Zabbix 可能超过�
 
 ---
 
-## 八、实际部署记录（2026-11-07 · 10.51.67.93）
+## 八、实际部署记录（2026-11-07 · DEPLOY_HOST）
 
-已按本方案在 `dev-ubuntu`（10.51.67.93，Ubuntu 24.04 / Docker 29.8 / Compose v5.5.1）完成部署并验收通过。
+已按本方案在 `dev-ubuntu`（DEPLOY_HOST，Ubuntu 24.04 / Docker 29.8 / Compose v5.5.1）完成部署并验收通过。
 
 - 目录：`/opt/zbx-console`（独立目录，未动服务器上其他项目）
 - 镜像：`zbx-console:4.1`；容器：`zbx-console`；网络：`zbx-console_default`；卷：`zbx-console-audit`
 - 端口：**`0.0.0.0:8770` 内网直连**（用户确认本机可直接访问开发环境端口，无需 SSH 隧道）
-  → 浏览器打开 `http://10.51.67.93:8770/`；需要收紧时 `ZBX_HOST_BIND=127.0.0.1 docker compose up -d`
+  → 浏览器打开 `http://DEPLOY_HOST:8770/`；需要收紧时 `ZBX_HOST_BIND=127.0.0.1 docker compose up -d`
 - 客户端注意：本机有企业代理时，浏览器/命令行访问该内网 IP 需绕过代理
   （curl 用 `--noproxy '*'`；测试脚本已给 Chrome 加 `--no-proxy-server`）
 
@@ -368,7 +368,7 @@ nginx 默认 `proxy_read_timeout 60s`。查 30 天数据时 Zabbix 可能超过�
 浏览器之外访问：
 
 ```bash
-curl -u 'user:password' http://10.51.67.93:8770/api/meta
+curl -u 'user:password' http://DEPLOY_HOST:8770/api/meta
 ```
 
 ### 9.2 自动化测试如何带凭据
@@ -378,9 +378,9 @@ curl -u 'user:password' http://10.51.67.93:8770/api/meta
 
 ```bash
 export BASIC_AUTH='user:password'
-node real/tests/ui-smoke.mjs zbx4 http://10.51.67.93:8770
-BASE=http://10.51.67.93:8770 node real/tests/responsive.mjs zbx4 10084
-BASE=http://10.51.67.93:8770 node real/tests/shots.mjs zbx4 10084
+node real/tests/ui-smoke.mjs zbx4 http://DEPLOY_HOST:8770
+BASE=http://DEPLOY_HOST:8770 node real/tests/responsive.mjs zbx4 10084
+BASE=http://DEPLOY_HOST:8770 node real/tests/shots.mjs zbx4 10084
 ```
 
 不设该变量时脚本行为不变（用于本地 `access=off` 环境）。

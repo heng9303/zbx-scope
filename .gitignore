@@ -26,8 +26,9 @@ handoff/
 # --- WorkBuddy 本地会话数据（含个人记忆，不删除、仅不入库）---
 .workbuddy/
 
-# --- 脱敏词表（本地可选，含真实口令字面串，绝不入库）---
+# --- 脱敏词表 / 本地地址映射表（含真实凭据与内网地址，绝不入库）---
 deploy/redact-words.local.txt
+docs/.local-addresses.md
 
 # --- 编辑器 / 系统 ---
 .DS_Store
