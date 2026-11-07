@@ -1,0 +1,65 @@
+# Zabbix 只读控制台 · Docker Compose
+#
+# 用法：
+#   cp config.docker.example.json config.json   # 填凭据
+#   docker compose up -d --build
+#   curl http://127.0.0.1:8770/api/ping          # → {"ok": true}
+#
+# 当前部署（10.51.67.93 开发环境）：默认绑 0.0.0.0，内网直连 8770。
+# ⚠ 本工具没有内置认证，绑 0.0.0.0 意味着同网段任何人都能看到监控数据 ——
+#   仅限可信内网/开发环境；生产或跨网段请先加访问控制。
+# 访问方式三选一（见 README-部署.md 第四节）：
+#   a) 内网直连 http://<host>:8770（当前方式）
+#   b) 前置 nginx + Basic Auth（团队共用、跨网段时推荐）
+#   c) 收紧到仅本机：ZBX_HOST_BIND=127.0.0.1 docker compose up -d
+
+services:
+  zbx-console:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zbx-console:4.1
+    container_name: zbx-console
+    restart: unless-stopped
+
+    ports:
+      # 开发环境内网直连（当前部署 10.51.67.93 用此方式）。
+      # 如需收紧到仅本机，设 ZBX_HOST_BIND=127.0.0.1 后 up -d，或改成下面这行：
+      # - "127.0.0.1:8770:8770"
+      - "${ZBX_HOST_BIND:-0.0.0.0}:8770:8770"
+
+    volumes:
+      # 凭据文件运行时挂载，只读。宿主机上该文件必须已存在（见 README 坑 #2）
+      - ./config.json:/app/config.json:ro
+      # 审计日志持久化（容器重建不丢）
+      - zbx-audit:/data
+
+    environment:
+      TZ: Asia/Shanghai
+      ZBX_BIND: 0.0.0.0          # 容器内必须监听 0.0.0.0，否则端口映射无效
+      ZBX_PORT: "8770"
+
+    # 根文件系统只读；审计日志走 /data 卷
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8770/api/ping',timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  zbx-audit:
+    name: zbx-console-audit

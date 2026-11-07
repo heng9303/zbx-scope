@@ -1,0 +1,2084 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zabbix 7.0 监控界面 · 真实接口原型</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy: #2E3B4E;
+    --bg: #F4F6F8;
+    --card: #FFFFFF;
+    --border: #E6EBF0;
+    --text: #1F2D3D;
+    --text-2: #6B7A8A;
+    --text-3: #9AA5B1;
+    --teal: #00A9C7;
+    --green: #22B07D;
+    --amber: #F5B921;
+    --red: #E5484D;
+    --blue: #4A90E2;
+    /* Zabbix 原生严重度色（ui 内置 severity_color_0..5） */
+    --sev0: #97AAB3;
+    --sev1: #7499FF;
+    --sev2: #FFC859;
+    --sev3: #FFA059;
+    --sev4: #E97659;
+    --sev5: #E45959;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar {
+    height: 56px;
+    background: var(--navy);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 16px;
+    position: sticky; top: 0; z-index: 40;
+  }
+  .brand { color: #fff; font-size: 15px; font-weight: 500; letter-spacing: .2px; display: flex; align-items: center; gap: 9px; }
+  .brand svg { display: block; }
+  .crumbs { color: #A8B3C2; font-size: 13.5px; }
+  .crumbs b { color: #E4EAF1; font-weight: 400; }
+  .topbar .spacer { flex: 1; }
+  .env-pill {
+    background: rgba(255,255,255,.12);
+    color: #D6DEE8;
+    font-size: 12.5px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    white-space: nowrap;
+    display: flex; align-items: center; gap: 7px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background .15s, border-color .15s;
+  }
+  .env-pill:hover { background: rgba(255,255,255,.18); }
+  .env-pill .led { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); display: block; flex: none; }
+  .env-pill.live .led { background: #3DDC97; box-shadow: 0 0 0 3px rgba(61,220,151,.18); }
+  .env-pill .caret { color: #8C9AAA; font-size: 10px; }
+
+  /* ---------- 页签 ---------- */
+  .tabs {
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 4px;
+    height: 52px;
+    position: sticky; top: 56px; z-index: 30;
+  }
+  .tab {
+    appearance: none; border: 0; background: none; font: inherit;
+    font-size: 14px; color: var(--text-2);
+    padding: 0 14px; height: 52px; cursor: pointer;
+    position: relative; transition: color .15s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); font-weight: 500; }
+  .tab.active::after {
+    content: ""; position: absolute; left: 14px; right: 14px; bottom: 0;
+    height: 2.5px; background: var(--teal); border-radius: 2px;
+  }
+  .tabs .range { margin-left: auto; font-size: 12.5px; color: var(--text-3); }
+  .icon-btn {
+    appearance: none; border: 1px solid var(--border); background: #fff;
+    font: inherit; font-size: 12.5px; color: var(--text-2);
+    padding: 6px 12px; border-radius: 7px; cursor: pointer; margin-left: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .icon-btn:hover { border-color: #C8D4DF; color: var(--text); }
+  .icon-btn .spin { display: inline-block; width: 11px; height: 11px; border: 1.6px solid #C8D4DF; border-top-color: var(--teal); border-radius: 50%; }
+  .icon-btn.loading .spin { animation: sp .7s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+
+  /* ---------- 布局 ---------- */
+  main { padding: 20px 24px 48px; max-width: 1580px; margin: 0 auto; }
+  .view { display: none; }
+  .view.active { display: block; }
+  .split { display: grid; grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+  /* 问题页左栏补齐到与右栏同高，底部汇总贴底 */
+  #view-problems .split { align-items: stretch; }
+  #view-problems .split > .card { display: flex; flex-direction: column; }
+  #view-problems .summary { margin-top: auto; }
+
+  /* ---------- 筛选 ---------- */
+  .filter {
+    margin: 14px 14px 0;
+    background: #F8FAFB;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 10px 12px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .filter .lab { font-size: 12px; color: var(--text-3); margin-right: 2px; }
+  .chip {
+    appearance: none; font: inherit; font-size: 12px;
+    border: 1px solid #DCE4EB; background: #fff; color: var(--text-2);
+    height: 27px; padding: 0 9px; border-radius: 999px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: all .13s; white-space: nowrap;
+  }
+  .chip:hover { border-color: #C3D0DC; color: var(--text); }
+  .chip.on { background: #E9F7FA; border-color: #93D9E4; color: #0B6C7E; font-weight: 500; }
+  .chip .cnt { font-size: 11px; opacity: .65; }
+  .chip .swatch { width: 8px; height: 8px; border-radius: 2px; display: block; }
+  .filter input[type="search"] {
+    font: inherit; font-size: 12px; border: 1px solid #DCE4EB; background: #fff;
+    height: 27px; border-radius: 999px; padding: 0 11px; width: 138px; color: var(--text);
+    outline: none;
+  }
+  .filter input[type="search"]:focus { border-color: #93D9E4; box-shadow: 0 0 0 3px rgba(0,169,199,.1); }
+  .filter .right { margin-left: auto; display: flex; align-items: center; gap: 7px; flex: none; white-space: nowrap; }
+  .api-tag {
+    font-size: 10px; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    color: #7A8B9A; background: #EFF3F6; border-radius: 4px; padding: 2px 5px;
+    cursor: help; white-space: nowrap;
+  }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left; font-size: 12px; font-weight: 400; color: var(--text-2);
+    background: #F8FAFB; padding: 10px 12px;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  tbody td {
+    padding: 12px; font-size: 13px;
+    border-bottom: 1px solid #F2F5F8; vertical-align: middle;
+    white-space: nowrap;
+  }
+  tbody td.problem { white-space: normal; min-width: 200px; line-height: 1.45; }
+  tbody td.problem .op { display: block; font-size: 11.5px; color: var(--text-3); margin-top: 3px; font-family: ui-monospace, Menlo, monospace; }
+  tbody tr { transition: background .12s; cursor: pointer; }
+  tbody tr:hover { background: #FAFCFD; }
+  tbody tr.alert { background: #FDF4F4; }
+  tbody tr.alert:hover { background: #FCEDED; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr.flash { animation: fl 1.1s ease; }
+  @keyframes fl { 0% { background: #DFF5F9; } 100% { background: transparent; } }
+
+  .pill {
+    display: inline-block; min-width: 58px; text-align: center;
+    padding: 2px 9px; border-radius: 4px; font-size: 11.5px; color: #fff; line-height: 1.6;
+  }
+  .s0 { background: var(--sev0); }
+  .s1 { background: var(--sev1); }
+  .s2 { background: var(--sev2); color: #5C4400; }
+  .s3 { background: var(--sev3); }
+  .s4 { background: var(--sev4); }
+  .s5 { background: var(--sev5); }
+
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+  .d-red { background: var(--red); }
+  .d-green { background: var(--green); }
+  .d-amber { background: var(--amber); }
+  .ack { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+
+  .row-btn {
+    appearance: none; font: inherit; font-size: 12px;
+    border: 1px solid #D6E2EA; background: #fff; color: #0B6C7E;
+    padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .row-btn:hover { background: #F0FAFC; border-color: #9FD8E3; }
+  .row-btn[disabled] { color: #B6C0CA; border-color: #E6EBF0; cursor: default; background: #FBFCFD; }
+
+  /* ---------- 底部汇总 ---------- */
+  .summary {
+    margin: 0; border-top: 1px solid #F0F3F6;
+    padding: 12px 16px; display: flex; align-items: center; gap: 16px;
+    background: #FCFDFE; border-radius: 0 0 12px 12px;
+  }
+  .summary .t1 { font-size: 13px; font-weight: 500; }
+  .summary .t2 { font-size: 11.5px; color: var(--text-3); margin-top: 4px; }
+  .summary .spacer { flex: 1; }
+  .pager { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-3); }
+  .pager button {
+    appearance: none; font: inherit; font-size: 11.5px; border: 1px solid var(--border);
+    background: #fff; color: var(--text-2); padding: 4px 9px; border-radius: 5px; cursor: pointer;
+  }
+  .pager button[disabled] { color: #C7D0D9; cursor: default; }
+
+  /* ---------- 指标卡 ---------- */
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px 17px 14px; position: relative; }
+  .stat .label { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+  .stat .value { font-size: 31px; font-weight: 500; line-height: 1.15; margin-top: 7px; letter-spacing: -.5px; }
+  .stat .value .unit { font-size: 12.5px; font-weight: 400; color: var(--text-2); margin-left: 4px; letter-spacing: 0; }
+  .stat .sub { font-size: 11px; color: var(--text-3); margin-top: 7px; }
+  .stat.dark { background: var(--navy); border-color: var(--navy); }
+  .stat.dark .label { color: rgba(255,255,255,.62); }
+  .stat.dark .value { color: #fff; }
+  .stat.dark .value .unit { color: rgba(255,255,255,.6); }
+  .stat.dark .sub { color: rgba(255,255,255,.5); }
+  .stat .src {
+    position: absolute; top: 12px; right: 12px;
+    font-size: 9.5px; font-family: ui-monospace, Menlo, monospace;
+    color: #A9B6C2; background: #F3F6F8; padding: 1px 4px; border-radius: 3px; cursor: help;
+  }
+  .stat.dark .src { color: rgba(255,255,255,.45); background: rgba(255,255,255,.1); }
+
+  /* ---------- 面板 ---------- */
+  .panel { padding: 16px 18px 14px; }
+  .panel-head { display: flex; align-items: baseline; gap: 9px; }
+  .panel-head h3 { font-size: 14px; font-weight: 500; }
+  .panel-head .meta { margin-left: auto; font-size: 11px; color: var(--text-3); }
+  .panel-sub { font-size: 11.5px; color: var(--text-3); margin-top: 6px; line-height: 1.5; }
+
+  /* 严重度分布（真实 6 级） */
+  .sev-list { margin-top: 14px; display: flex; flex-direction: column; gap: 9px; }
+  .sev-row { display: flex; align-items: center; gap: 9px; font-size: 12px; }
+  .sev-row .name { width: 58px; color: var(--text-2); flex: none; }
+  .sev-row .track { flex: 1; height: 7px; background: #F1F5F8; border-radius: 4px; overflow: hidden; }
+  .sev-row .fill { display: block; height: 100%; border-radius: 4px; transition: width .45s cubic-bezier(.2,.7,.3,1); }
+  .sev-row .num { width: 22px; text-align: right; color: var(--text); font-weight: 500; flex: none; font-variant-numeric: tabular-nums; }
+  .sev-row .num.zero { color: #C3CDD6; font-weight: 400; }
+
+  /* 24h 分布 */
+  .bars { display: flex; align-items: flex-end; gap: 6px; height: 120px; margin-top: 16px; padding-bottom: 1px; border-bottom: 1px solid #EEF2F6; }
+  .bar-col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; }
+  .bar { width: 100%; max-width: 22px; border-radius: 2px 2px 0 0; transition: height .5s cubic-bezier(.2,.7,.3,1); }
+  .bar-label { position: absolute; bottom: -19px; font-size: 10.5px; color: var(--text-3); }
+
+  /* ---------- 图形 ---------- */
+  .traffic-head { display: flex; align-items: center; padding: 16px 18px 0; gap: 10px; flex-wrap: wrap; }
+  .traffic-head h3 { font-size: 14.5px; font-weight: 500; }
+  .traffic-head select {
+    font: inherit; font-size: 12px; border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 8px; background: #fff; color: var(--text); max-width: 260px;
+  }
+  .sel-item {
+    font-size: 11.5px; color: var(--text-2); background: #F3F7F9;
+    border: 1px solid #E6EDF2; border-radius: 6px; padding: 4px 9px;
+    max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .legend { margin-left: auto; display: flex; gap: 16px; }
+  .legend span { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2); }
+  .legend i { width: 16px; height: 3px; border-radius: 2px; display: block; }
+  .l-in { background: var(--green); }
+  .l-out { background: var(--blue); }
+  .chart-wrap { padding: 4px 8px 0; }
+  .chart-wrap svg { display: block; width: 100%; height: auto; }
+  .traffic-stats { display: flex; border-top: 1px solid #F2F5F8; margin-top: 4px; }
+  .traffic-stats > div { flex: 1; padding: 13px 14px; border-left: 1px solid #F2F5F8; }
+  .traffic-stats > div:first-child { border-left: 0; }
+  .traffic-stats .k { font-size: 11.5px; color: var(--text-3); }
+  .traffic-stats .v { font-size: 19px; font-weight: 500; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .traffic-stats .v small { font-size: 11.5px; font-weight: 400; color: var(--text-2); margin-left: 3px; }
+  .v-hot { color: var(--sev4); }
+  .item-key { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--text-3); }
+
+  .hp-row { display: flex; align-items: center; gap: 8px; padding: 9px 8px; border-bottom: 1px solid #F4F7F9; }
+  .hp-row:last-child { border-bottom: 0; }
+  .hp-name { flex: 1; font-size: 12.5px; line-height: 1.45; min-width: 0; }
+  .hp-dur { font-size: 11px; color: #9AA5B1; flex: none; }
+
+  /* ---------- 拓扑 ---------- */
+  .topo-wrap { padding: 8px 12px 0; }
+  .topo-wrap svg { display: block; width: 100%; height: auto; background: #FBFCFD; border-radius: 8px; }
+  .topo-node { cursor: pointer; }
+  .topo-node rect.box { transition: filter .15s; }
+  .topo-node:hover rect.box { filter: brightness(.97); }
+  .topo-node.sel rect.box { stroke-width: 2; }
+  .tn-text { font-size: 11px; fill: #2C3A4B; text-anchor: middle; dominant-baseline: central; }
+  .tn-lab { font-size: 9.5px; fill: #8B98A5; }
+  .tn-link { stroke: #C2CDD8; stroke-width: 1.4; fill: none; }
+  .tn-link.hot { stroke: #E9A29B; }
+  .topo-foot { border-top: 1px solid #F2F5F8; padding: 11px 16px 13px; }
+  .topo-legend { display: flex; gap: 16px; flex-wrap: wrap; }
+  .topo-legend span { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2); }
+  .topo-hint { font-size: 11px; color: var(--text-3); margin-top: 8px; line-height: 1.5; }
+
+  /* ---------- 接口契约页 ---------- */
+  .api-grid { display: grid; grid-template-columns: minmax(0, 1.48fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .api-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .api-table th { background: #F8FAFB; font-weight: 400; color: var(--text-2); font-size: 11.5px; padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  .api-table td { padding: 9px 10px; border-bottom: 1px solid #F2F5F8; vertical-align: top; line-height: 1.5; }
+  .api-table code, code.mono {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px;
+    background: #F1F5F8; color: #34506B; padding: 1px 5px; border-radius: 3px;
+  }
+  .api-table tr:last-child td { border-bottom: 0; }
+  .badge { display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+  .b-ok { background: #E7F7F0; color: #157A55; }
+  .b-work { background: #FFF6E3; color: #8A6100; }
+  .b-no { background: #FDECEC; color: #A72B2B; }
+  .b-info { background: #EAF2FE; color: #2860A8; }
+
+  .chain { margin-top: 12px; display: flex; flex-direction: column; gap: 0; }
+  .chain-step { display: flex; gap: 11px; position: relative; padding-bottom: 16px; }
+  .chain-step:last-child { padding-bottom: 0; }
+  .chain-step::before {
+    content: ""; position: absolute; left: 10px; top: 22px; bottom: 2px; width: 1px; background: #E3EAF0;
+  }
+  .chain-step:last-child::before { display: none; }
+  .chain-num {
+    width: 21px; height: 21px; border-radius: 50%; background: #EAF7F9; color: #0B6C7E;
+    font-size: 11px; display: flex; align-items: center; justify-content: center; flex: none; z-index: 1;
+    border: 1px solid #B9E3EB;
+  }
+  .chain-body { flex: 1; min-width: 0; }
+  .chain-method { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #1F2D3D; font-weight: 500; }
+  .chain-meta { font-size: 11px; color: var(--text-3); margin-top: 3px; }
+  .chain-code {
+    margin-top: 6px; background: #F8FAFB; border: 1px solid #EEF2F6; border-radius: 6px;
+    padding: 8px 10px; font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+    color: #4A5F73; white-space: pre-wrap; word-break: break-all; line-height: 1.55;
+    max-height: 150px; overflow: auto;
+  }
+
+  .note { background: #FFFBF2; border: 1px solid #F5E4BE; border-radius: 9px; padding: 12px 14px; font-size: 12px; color: #6B5320; line-height: 1.65; }
+  .note b { color: #4A3800; }
+  .note ol, .note ul { margin: 6px 0 0 18px; }
+  .note li { margin-top: 5px; }
+  .note code { background: rgba(0,0,0,.05); }
+
+  .cmp { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .cmp th { font-size: 11.5px; font-weight: 400; color: var(--text-2); background: #F8FAFB; padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  .cmp td { padding: 9px 10px; border-bottom: 1px solid #F2F5F8; vertical-align: top; line-height: 1.55; }
+  .cmp td:first-child { color: var(--text-2); width: 96px; }
+  .cmp tr:last-child td { border-bottom: 0; }
+  .verdict {
+    display: flex; gap: 11px; align-items: flex-start;
+    background: #EDF9F6; border: 1px solid #BFE9DC; border-radius: 10px; padding: 13px 15px;
+    font-size: 12.5px; color: #14624A; line-height: 1.6; margin-bottom: 14px;
+  }
+  .verdict .mark {
+    width: 19px; height: 19px; border-radius: 50%; background: #17A673; color: #fff;
+    font-size: 12px; display: flex; align-items: center; justify-content: center; flex: none; margin-top: 1px;
+  }
+
+  /* ---------- 抽屉 ---------- */
+  .drawer-mask {
+    position: fixed; inset: 0; background: rgba(24,37,51,.32); opacity: 0; pointer-events: none;
+    transition: opacity .2s; z-index: 60;
+  }
+  .drawer-mask.show { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 520px; max-width: 94vw;
+    background: #fff; z-index: 61; transform: translateX(100%); transition: transform .24s cubic-bezier(.3,.8,.4,1);
+    display: flex; flex-direction: column; box-shadow: -12px 0 40px rgba(20,35,50,.14);
+  }
+  .drawer.show { transform: none; }
+  .drawer-head { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .drawer-head h3 { font-size: 14.5px; font-weight: 500; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .drawer-head .x { margin-left: auto; appearance: none; border: 0; background: none; font-size: 20px; color: #9AA5B1; cursor: pointer; line-height: 1; }
+  .drawer-body { padding: 16px 20px 28px; overflow: auto; flex: 1; }
+  .kv { display: grid; grid-template-columns: 96px 1fr; gap: 7px 12px; font-size: 12.5px; }
+  .kv dt { color: var(--text-3); font-size: 12px; }
+  .kv dd { color: var(--text); word-break: break-all; }
+  .drawer h4 { font-size: 12px; font-weight: 500; color: var(--text-2); margin: 20px 0 8px; }
+  pre.json {
+    background: #1E2A38; color: #C9D8E6; border-radius: 8px; padding: 12px 14px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.6;
+    overflow: auto; max-height: 340px; white-space: pre;
+  }
+  pre.json .k { color: #7FD4E8; }
+  pre.json .s { color: #F2C08A; }
+  pre.json .n { color: #B6E3A8; }
+
+  /* 连接表单 */
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
+  .field input[type="text"], .field input[type="password"], .field select {
+    width: 100%; font: inherit; font-size: 13px; padding: 9px 11px;
+    border: 1px solid #DCE4EB; border-radius: 7px; color: var(--text); background: #fff; outline: none;
+  }
+  .field input:focus, .field select:focus { border-color: #93D9E4; box-shadow: 0 0 0 3px rgba(0,169,199,.1); }
+  .field .hint { font-size: 11px; color: var(--text-3); margin-top: 5px; line-height: 1.55; }
+  .radio-row { display: flex; gap: 8px; }
+  .radio-row label {
+    flex: 1; border: 1px solid #DCE4EB; border-radius: 8px; padding: 9px 11px; cursor: pointer;
+    font-size: 12.5px; color: var(--text-2); display: block; margin: 0;
+  }
+  .radio-row label.on { border-color: #93D9E4; background: #F2FBFD; color: #0B6C7E; }
+  .radio-row input { margin-right: 6px; }
+  .btn-primary {
+    appearance: none; border: 0; font: inherit; font-size: 13px;
+    background: var(--teal); color: #fff; padding: 10px 18px; border-radius: 8px; cursor: pointer;
+  }
+  .btn-primary:hover { filter: brightness(1.06); }
+  .btn-ghost {
+    appearance: none; border: 1px solid var(--border); font: inherit; font-size: 13px;
+    background: #fff; color: var(--text-2); padding: 10px 16px; border-radius: 8px; cursor: pointer;
+  }
+  .conn-out { margin-top: 12px; font-size: 12px; line-height: 1.6; padding: 10px 12px; border-radius: 7px; display: none; }
+  .conn-out.ok { display: block; background: #E9F8F3; color: #14624A; border: 1px solid #C4EADD; }
+  .conn-out.err { display: block; background: #FDEDED; color: #A02B2B; border: 1px solid #F5C9C9; }
+
+  /* ---------- toast ---------- */
+  #toast {
+    position: fixed; left: 50%; bottom: 30px; transform: translate(-50%, 14px);
+    background: rgba(31,45,61,.95); color: #fff; font-size: 13px; padding: 11px 20px;
+    border-radius: 999px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 80;
+    max-width: 80vw;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  .proto-note { text-align: center; font-size: 11px; color: #AEB8C2; padding: 0 0 24px; line-height: 1.7; }
+
+  @media (max-width: 1180px) {
+    .split, .api-grid { grid-template-columns: 1fr; }
+    .drawer { width: 440px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="1.5" y="1.5" width="21" height="21" rx="4.5" fill="#00A9C7" opacity=".16"/>
+      <path d="M6 8.5h12M6 15.5h12M9.5 5.5v13M14.5 5.5v13" stroke="#7FE3F2" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    Zabbix
+  </div>
+  <div class="crumbs" id="crumbs"><b>Monitoring</b> → <b>Problems</b></div>
+  <div class="spacer"></div>
+  <div class="env-pill" id="connPill" title="点击配置数据源">
+    <span class="led"></span><span id="connText">演示数据</span><span class="caret">▾</span>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-tab="problems">问题</button>
+  <button class="tab" data-tab="graphs">图形</button>
+  <button class="tab" data-tab="topo">拓扑</button>
+  <button class="tab" data-tab="api">接口契约</button>
+  <span class="range" id="rangeLabel">最近 24 小时</span>
+  <button class="icon-btn" id="refreshBtn"><i class="spin"></i>刷新</button>
+</nav>
+
+<main>
+
+  <!-- ================= 问题 ================= -->
+  <section class="view active" id="view-problems">
+    <div class="split">
+      <div class="card">
+        <div class="filter" id="filterBar">
+          <span class="lab">级别</span>
+          <button class="chip" data-sev="5"><i class="swatch" style="background:var(--sev5)"></i>灾难</button>
+          <button class="chip" data-sev="4"><i class="swatch" style="background:var(--sev4)"></i>严重</button>
+          <button class="chip" data-sev="3"><i class="swatch" style="background:var(--sev3)"></i>一般</button>
+          <button class="chip" data-sev="2"><i class="swatch" style="background:var(--sev2)"></i>警告</button>
+          <button class="chip" data-filter="unack">仅未确认</button>
+          <button class="chip" data-filter="suppressed">含已抑制</button>
+          <button class="chip on" data-group="0">全部主机</button>
+          <div class="right">
+            <input type="search" id="searchInput" placeholder="搜索问题名称…">
+            <span class="api-tag" id="apiHint" title="当前筛选对应的 API 参数">problem.get</span>
+          </div>
+        </div>
+
+        <table style="margin-top: 10px;">
+          <thead>
+            <tr>
+              <th style="width: 110px;">时间</th>
+              <th style="width: 72px;">级别</th>
+              <th style="width: 120px;">主机</th>
+              <th>问题</th>
+              <th style="width: 78px;">持续</th>
+              <th style="width: 92px;">确认</th>
+              <th style="width: 62px;"></th>
+            </tr>
+          </thead>
+          <tbody id="problemRows"></tbody>
+        </table>
+
+        <div class="summary">
+          <div>
+            <div class="t1" id="sumLine1">—</div>
+            <div class="t2" id="sumLine2">—</div>
+          </div>
+          <div class="spacer"></div>
+          <div class="pager" id="pager"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="stats">
+          <div class="stat">
+            <span class="src" title="host.get countOutput">host.get</span>
+            <div class="label">纳管主机</div>
+            <div class="value" id="statHosts">—</div>
+            <div class="sub" id="statHostsSub">—</div>
+          </div>
+          <div class="stat dark">
+            <span class="src" title="problem.get countOutput">problem.get</span>
+            <div class="label">活动问题</div>
+            <div class="value"><span id="statProblems">—</span><span class="unit">条</span></div>
+            <div class="sub" id="statProblemsSub">—</div>
+          </div>
+          <div class="stat">
+            <span class="src" title="problem.get + 客户端聚合">聚合</span>
+            <div class="label">未确认</div>
+            <div class="value"><span id="statUnack">—</span><span class="unit">条</span></div>
+            <div class="sub" id="statUnackSub">—</div>
+          </div>
+          <div class="stat">
+            <span class="src" title="alert.get">alert.get</span>
+            <div class="label">通知送达</div>
+            <div class="value"><span id="statAlerts">—</span><span class="unit">条</span></div>
+            <div class="sub" id="statAlertsSub">—</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 14px;">
+          <div class="panel">
+            <div class="panel-head">
+              <h3>严重度分布</h3>
+              <span class="meta">按当前筛选</span>
+            </div>
+            <div class="panel-sub">Zabbix 原生 6 级严重度，颜色与官方前端一致，用户无需重新学习语义</div>
+            <div class="sev-list" id="sevList"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 14px;">
+          <div class="panel">
+            <div class="panel-head">
+              <h3>近 24 小时新增问题</h3>
+              <span class="meta">单位：条 / 2 小时</span>
+            </div>
+            <div class="panel-sub" id="trendSub">—</div>
+            <div class="bars" id="alertBars"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 图形 ================= -->
+  <section class="view" id="view-graphs">
+    <div class="split">
+      <div class="card">
+        <div class="traffic-head">
+          <h3 id="graphTitle">—</h3>
+          <span class="sel-item" id="itemSelect">—</span>
+          <div class="legend">
+            <span><i class="l-in"></i>入向 In</span>
+            <span><i class="l-out"></i>出向 Out</span>
+          </div>
+        </div>
+        <div style="padding: 4px 18px 0; font-size: 11px; color: var(--text-3);">
+          <span class="item-key" id="itemKey">—</span>
+        </div>
+        <div class="chart-wrap">
+          <svg id="trafficChart" viewBox="0 0 720 290" role="img" aria-label="端口入向出向流量趋势图"></svg>
+        </div>
+        <div class="traffic-stats" id="itemStats"></div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="panel-head" style="padding: 16px 18px 0;">
+            <h3>该主机当前问题</h3>
+            <span class="meta">trigger.get</span>
+          </div>
+          <div style="padding: 0 18px 4px; font-size: 11px; color: var(--text-3);" id="graphHostLine">—</div>
+          <div id="hostProblems" style="padding: 6px 10px 12px;"></div>
+        </div>
+
+        <div class="card" style="margin-top: 14px;">
+          <div class="panel-head" style="padding: 16px 18px 0;">
+            <h3>指标元信息</h3>
+            <span class="meta">item.get</span>
+          </div>
+          <div style="padding: 12px 18px 16px;" id="itemMeta"></div>
+          <div class="topo-foot">
+            <div class="topo-hint">
+              <code class="mono">history.get</code> 必须带 <code class="mono">history</code>（value_type：0 float / 3 uint），
+              默认保留 90 天；更长周期走 <code class="mono">trend.get</code>（365 天）。
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 拓扑 ================= -->
+  <section class="view" id="view-topo">
+    <div class="split">
+      <div class="card">
+        <div class="traffic-head">
+          <h3 id="mapTitle">—</h3>
+          <div class="legend">
+            <span><i class="dot d-green"></i>正常</span>
+            <span><i class="dot d-amber"></i>警告</span>
+            <span><i class="dot d-red"></i>故障</span>
+          </div>
+        </div>
+        <div style="padding: 2px 18px 0; font-size: 11px; color: var(--text-3);" id="mapMeta">—</div>
+        <div class="topo-wrap">
+          <svg id="topoCanvas" viewBox="0 0 800 600" role="img" aria-label="Zabbix 网络映射图"></svg>
+        </div>
+        <div class="topo-foot">
+          <div class="topo-hint">
+            节点坐标直接取自 <code class="mono">map.get</code> 的 <code class="mono">selements[].x / .y</code>（sysmap 逻辑坐标
+            0–800 × 0–600），按容器宽度等比缩放；连线取自 <code class="mono">links[]</code> 的
+            <code class="mono">selementid1 / selementid2</code>。链路变红不是读 <code class="mono">link.color</code>（那只是样式色），
+            而是读 <code class="mono">linktriggers</code> 并判断绑定触发器是否有活动问题。无需另建拓扑数据源。
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="panel-head" style="padding: 16px 18px 0;">
+          <h3>节点详情</h3>
+          <span class="meta" id="nodeMeta">未选中</span>
+        </div>
+        <div style="padding: 12px 18px 18px;" id="nodeDetail">
+          <div style="font-size: 12px; color: var(--text-3); line-height: 1.7;">
+            点击左侧任意节点，查看该元素映射的 host / trigger 及其当前问题。
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 接口契约 ================= -->
+  <section class="view" id="view-api">
+    <div class="verdict">
+      <span class="mark">✓</span>
+      <div>
+        <b>结论：做成「同域独立页面」，不要试图替换 Zabbix 主 UI。</b>
+        视觉上它可以像一套新界面，但架构上是通过 <code class="mono">api_jsonrpc.php</code> 取数的外挂页面，
+        既不动核心 PHP，也不承担升级维护成本。具体对比见本页末尾。
+      </div>
+    </div>
+
+    <div class="api-grid">
+      <div class="card">
+        <div class="panel-head" style="padding: 16px 18px 0;">
+          <h3>页面元素 ↔ 接口映射</h3>
+          <span class="meta">Zabbix 7.0</span>
+        </div>
+        <div style="padding: 10px 8px 8px;">
+          <table class="api-table">
+            <thead>
+              <tr><th style="width: 104px;">页面功能</th><th style="width: 120px;">API 方法</th><th>关键参数 / 字段</th><th style="width: 68px;">状态</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>问题列表</td>
+                <td><code>problem.get</code></td>
+                <td><code>output: extend</code>, <code>selectTags</code>, <code>sortfield: eventid</code>, <code>sortorder: DESC</code>, <code>limit</code></td>
+                <td><span class="badge b-ok">原生支持</span></td>
+              </tr>
+              <tr>
+                <td>主机名</td>
+                <td><code>trigger.get</code></td>
+                <td>用 <code>objectid</code> 批量查 <code>selectHosts: ['hostid','name']</code>。<b>problem.get 不返回主机名</b></td>
+                <td><span class="badge b-work">需二次 join</span></td>
+              </tr>
+              <tr>
+                <td>级别筛选</td>
+                <td><code>problem.get</code></td>
+                <td><code>severities: [3,4,5]</code>（数组，非字符串）</td>
+                <td><span class="badge b-ok">原生支持</span></td>
+              </tr>
+              <tr>
+                <td>主机组筛选</td>
+                <td><code>problem.get</code></td>
+                <td><code>groupids: ['12','15']</code></td>
+                <td><span class="badge b-ok">原生支持</span></td>
+              </tr>
+              <tr>
+                <td>未确认 / 已抑制</td>
+                <td><code>problem.get</code></td>
+                <td><code>acknowledged: false</code>, <code>suppressed: false</code></td>
+                <td><span class="badge b-ok">原生支持</span></td>
+              </tr>
+              <tr>
+                <td>搜索问题名</td>
+                <td><code>problem.get</code></td>
+                <td><code>search: { name: '...' }</code>（子串匹配，非全文）</td>
+                <td><span class="badge b-ok">原生支持</span></td>
+              </tr>
+              <tr>
+                <td>确认告警</td>
+                <td><code>event.acknowledge</code></td>
+                <td><code>eventids</code>, <code>action: 6</code>（2 确认 + 4 留言），<code>message</code></td>
+                <td><span class="badge b-ok">原生支持</span></td>
+              </tr>
+              <tr>
+                <td>关闭问题</td>
+                <td><code>event.acknowledge</code></td>
+                <td><code>action: 1</code>；仅手动关闭类触发器可关，多数由恢复事件自动关闭</td>
+                <td><span class="badge b-work">有条件</span></td>
+              </tr>
+              <tr>
+                <td>严重度统计</td>
+                <td><code>problem.get</code></td>
+                <td><code>countOutput: true</code> 需按 6 个级别各调一次；API 无 group by</td>
+                <td><span class="badge b-work">需 6 次或前端聚合</span></td>
+              </tr>
+              <tr>
+                <td>24h 新增趋势</td>
+                <td><code>event.get</code></td>
+                <td><code>time_from/time_till</code>, <code>source: 0</code>, 取 <code>clock</code> 后前端分桶</td>
+                <td><span class="badge b-work">需前端聚合</span></td>
+              </tr>
+              <tr>
+                <td>指标曲线</td>
+                <td><code>item.get</code> → <code>history.get</code></td>
+                <td><code>history: 0</code>(float)/<code>3</code>(uint), <code>time_from</code>, <code>time_till</code>, <code>limit</code></td>
+                <td><span class="badge b-ok">原生支持</span></td>
+              </tr>
+              <tr>
+                <td>长周期曲线</td>
+                <td><code>trend.get</code></td>
+                <td><code>value_avg / value_min / value_max</code>，仅 0 和 3 两种 value_type</td>
+                <td><span class="badge b-ok">原生支持</span></td>
+              </tr>
+              <tr>
+                <td>拓扑图</td>
+                <td><code>map.get</code></td>
+                <td><code>selectSelements</code>, <code>selectLinks</code>, <code>selectLinkTriggers</code>；坐标在 <code>selements[].x/.y</code></td>
+                <td><span class="badge b-ok">原生支持</span></td>
+              </tr>
+              <tr>
+                <td>拓扑节点状态</td>
+                <td><code>problem.get</code></td>
+                <td>用 <code>selements[].elementid</code> 批量查活动问题，按最高 severity 上色</td>
+                <td><span class="badge b-work">需二次 join</span></td>
+              </tr>
+              <tr>
+                <td>通知 / 企业微信送达</td>
+                <td><code>alert.get</code></td>
+                <td><code>selectMediatypes</code>, <code>status</code>(0 未发/1 已发/2 失败/3 重试), <code>error</code></td>
+                <td><span class="badge b-ok">只读展示</span></td>
+              </tr>
+              <tr>
+                <td>主动推送企业微信</td>
+                <td>—</td>
+                <td>Zabbix 无「手动推送」API；消息由 Action + Media type(Webhook) 触发，页面只能查结果</td>
+                <td><span class="badge b-no">不支持</span></td>
+              </tr>
+              <tr>
+                <td>自动发现链路</td>
+                <td>—</td>
+                <td>Zabbix 7.0 无 LLDP 拓扑发现 API；需自建采集或 CMDB 导入</td>
+                <td><span class="badge b-no">不支持</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="panel-head" style="padding: 16px 18px 0;">
+            <h3>本次渲染的实际调用链</h3>
+            <span class="meta" id="chainMeta">—</span>
+          </div>
+          <div style="padding: 12px 18px 18px;">
+            <div class="chain" id="chainList"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 14px;">
+          <div class="panel" style="padding-bottom: 16px;">
+            <div class="panel-head"><h3>必须提前知道的 8 个坑</h3></div>
+            <div class="note" style="margin-top: 10px;">
+              <ol>
+                <li><b>返回值全是字符串。</b><code>severity: "5"</code>，<code>acknowledged: "0"</code>。JS 里必须 <code>Number()</code> 后再比较，否则 <code>"0"</code> 是真值。</li>
+                <li><b>没有 offset 分页。</b>只有 <code>limit</code>，深分页要用 <code>eventid_till</code> 做游标。</li>
+                <li><b>problem.get 没有 host。</b>必须用 <code>objectid</code>（=triggerid）二次查，注意批量避免 N+1。</li>
+                <li><b>history 会过期。</b>默认保留 90 天，超期取不到；长周期必须切 <code>trend.get</code>。</li>
+                <li><b>history 数据量大。</b>24h × 1min 就是 1440 点/指标，需降采样或用 <code>trend</code>。</li>
+                <li><b>统计口径要统一。</b>默认排除维护期抑制的问题，图表与列表口径不一致会被质疑。</li>
+                <li><b>认证方式变了。</b>7.0 已弃用 <code>auth</code> 字段，用 <code>Authorization: Bearer</code> 或同域 <code>zbx_session</code> cookie。</li>
+                <li><b>权限在 API 层。</b>独立 UI 不做前端元素级权限，但 API 会按登录用户过滤数据，不会越权。</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 18px;">
+      <div class="panel-head" style="padding: 16px 18px 0;">
+        <h3>架构选型：独立 UI 还是替换主 UI</h3>
+        <span class="meta">同一个页面，两种命运</span>
+      </div>
+      <div style="padding: 10px 8px 8px;">
+        <table class="cmp">
+          <thead>
+            <tr><th></th><th>A · 独立 SPA（推荐）</th><th>B · Zabbix 前端模块</th><th>C · 改核心源码替换 Problems 页</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>做法</td>
+              <td>Vue/React 或纯静态页，调 <code>api_jsonrpc.php</code> 取数</td>
+              <td>放 <code>modules/</code>，<code>manifest.json</code> 注册菜单，页面在模块内</td>
+              <td>直接改 <code>app/controllers</code> 与 <code>app/views</code></td>
+            </tr>
+            <tr>
+              <td>与主 UI 关系</td>
+              <td>独立入口，可挂到同一域的子路径</td>
+              <td>出现在 Zabbix 左侧菜单内，共用登录态</td>
+              <td>完全替代，用户感知不到边界</td>
+            </tr>
+            <tr>
+              <td>登录 / 会话</td>
+              <td>同域可复用 <code>zbx_session</code>；跨域需 API Token</td>
+              <td>天然复用会话，无需登录</td>
+              <td>天然复用</td>
+            </tr>
+            <tr>
+              <td>开发量</td>
+              <td>中（前端为主，无 PHP 依赖）</td>
+              <td>中（需懂模块结构与 PHP 入口）</td>
+              <td>高（读透原生页面逻辑）</td>
+            </tr>
+            <tr>
+              <td>升级影响</td>
+              <td><span class="badge b-ok">无</span> 仅依赖 API 契约</td>
+              <td><span class="badge b-ok">低</span> 框架升级时校验 manifest</td>
+              <td><span class="badge b-no">高</span> 每次升级都要重新 merge</td>
+            </tr>
+            <tr>
+              <td>许可风险</td>
+              <td><span class="badge b-ok">低</span> 仅调 API</td>
+              <td><span class="badge b-work">中</span> 模块与 Zabbix 同进程分发，需评估 AGPLv3</td>
+              <td><span class="badge b-no">高</span> 衍生作品，分发即触发开放义务</td>
+            </tr>
+            <tr>
+              <td>像素级还原</td>
+              <td><span class="badge b-ok">完全可控</span></td>
+              <td>受布局槽位限制，主体区域可自由发挥</td>
+              <td>可，但维护成本极高</td>
+            </tr>
+            <tr>
+              <td>适用</td>
+              <td>新入口、大屏、领导视图、跨系统整合</td>
+              <td>要「融合进 Zabbix」且不做大改</td>
+              <td>不建议</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="padding: 4px 18px 18px;">
+        <div class="note">
+          <b>落地建议（按投入排序）：</b>
+          ① 先做 A，页面放同域子路径 <code>/zabbix/ui-custom/</code>，复用 <code>zbx_session</code>，零登录改造；
+          ② 需要入口曝光时，再加一个极薄的 B 模块，只做「菜单元 + iframe/跳转」，业务代码仍留在 A；
+          ③ C 只在客户强制要求「点开 Problems 就是新界面」时才考虑，且只替换单个页面，不动全局。
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="proto-note" id="protoNote">
+  演示数据 · 结构与 Zabbix 7.0 API 返回值一致（数值均为字符串），切换右上角可连接真实实例
+</footer>
+
+<div class="drawer-mask" id="mask"></div>
+
+<!-- 详情抽屉 -->
+<aside class="drawer" id="detailDrawer">
+  <div class="drawer-head">
+    <h3>问题详情</h3>
+    <span class="badge b-info" id="drawerEventId">—</span>
+    <button class="x" id="drawerClose">×</button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
+
+<!-- 连接抽屉 -->
+<aside class="drawer" id="connDrawer">
+  <div class="drawer-head">
+    <h3>数据源设置</h3>
+    <button class="x" id="connClose">×</button>
+  </div>
+  <div class="drawer-body">
+    <div class="field">
+      <label>API 地址</label>
+      <input type="text" id="apiUrl" value="/api_jsonrpc.php">
+      <div class="hint">同域部署可填相对路径，直接复用浏览器里的 <code class="mono">zbx_session</code>；跨域需填完整 URL。</div>
+    </div>
+
+    <div class="field">
+      <label>认证方式</label>
+      <div class="radio-row">
+        <label class="on" id="authSessionLabel"><input type="radio" name="auth" value="session" checked>复用会话</label>
+        <label id="authTokenLabel"><input type="radio" name="auth" value="token">API Token</label>
+      </div>
+    </div>
+
+    <div class="field" id="tokenField" style="display:none;">
+      <label>Token</label>
+      <input type="password" id="apiToken" placeholder="粘贴 API Token">
+      <div class="hint">在 Zabbix「用户设置 → API tokens」创建。7.0 起用 <code class="mono">Authorization: Bearer</code> 传递。</div>
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top: 18px;">
+      <button class="btn-primary" id="testConn">测试并连接</button>
+      <button class="btn-ghost" id="useDemo">回到演示数据</button>
+    </div>
+    <div class="conn-out" id="connOut"></div>
+
+    <div class="note" style="margin-top: 20px;">
+      <b>为什么连不上：</b>
+      <ul>
+        <li>直接双击 <code class="mono">file://</code> 打开时，浏览器会拦截跨域请求，必须用 http(s) 访问。</li>
+        <li>跨域时需 7.0.7+（支持 <code class="mono">Authorization</code> 头的 CORS）；更早版本请走同域或加反向代理。</li>
+        <li>Apache 默认不转发 <code class="mono">Authorization</code> 头，需加 <code class="mono">SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1</code>。</li>
+      </ul>
+    </div>
+  </div>
+</aside>
+
+<div id="toast"></div>
+
+<script>
+(function () {
+"use strict";
+
+/* =====================================================================
+   0. 配置与传输层
+   演示模式与真实模式走同一套渲染代码，只有 transport 不同。
+   ===================================================================== */
+
+var CFG = { mode: "demo", apiUrl: "/api_jsonrpc.php", auth: "session", token: "" };
+var RPC_ID = 0;
+
+function nowSec() { return Math.floor(Date.now() / 1000); }
+
+/* 真实 JSON-RPC 调用 */
+function liveRpc(method, params) {
+  var headers = { "Content-Type": "application/json-rpc" };
+  if (CFG.auth === "token" && CFG.token) headers["Authorization"] = "Bearer " + CFG.token;
+
+  return fetch(CFG.apiUrl, {
+    method: "POST",
+    headers: headers,
+    credentials: "include",
+    body: JSON.stringify({ jsonrpc: "2.0", method: method, params: params, id: ++RPC_ID })
+  }).then(function (r) {
+    if (!r.ok) throw new Error("HTTP " + r.status + " " + r.statusText);
+    return r.json();
+  }).then(function (j) {
+    if (j.error) {
+      throw new Error(j.error.message + (j.error.data ? "：" + j.error.data : ""));
+    }
+    return j.result;
+  });
+}
+
+var CHAIN = [];
+function call(method, params) {
+  var t0 = performance.now();
+  var p = (CFG.mode === "demo") ? demoRpc(method, params) : liveRpc(method, params);
+  return p.then(function (res) {
+    CHAIN.push({
+      method: method,
+      params: params,
+      ms: Math.max(1, Math.round(performance.now() - t0)),
+      kind: Array.isArray(res) ? "list" : (typeof res === "string" ? "count" : "one"),
+      count: Array.isArray(res) ? res.length : (typeof res === "string" ? res : 1)
+    });
+    return res;
+  });
+}
+
+/* =====================================================================
+   1. 演示数据：严格按 Zabbix 7.0 返回结构，数值一律字符串
+   ===================================================================== */
+
+var SEV_NAME = ["未分类", "信息", "警告", "一般严重", "严重", "灾难"];
+var SEV_COLOR = ["#97AAB3", "#7499FF", "#FFC859", "#FFA059", "#E97659", "#E45959"];
+
+var HOSTS = [
+  { hostid: "10234", host: "Core-SW-01", name: "核心交换机 01", groups: ["核心网络"] },
+  { hostid: "10235", host: "FW-Edge-02", name: "边界防火墙 02", groups: ["安全设备"] },
+  { hostid: "10241", host: "SVR-ERP-01", name: "ERP 应用服务器", groups: ["服务器区"] },
+  { hostid: "10248", host: "RT-Branch-03", name: "分支路由器 03", groups: ["分支网络"] },
+  { hostid: "10255", host: "UPS-Room-01", name: "机房 UPS 01", groups: ["动环"] },
+  { hostid: "10261", host: "SVR-DB-02", name: "数据库服务器 02", groups: ["服务器区"] },
+  { hostid: "10267", host: "AP-Floor3-07", name: "三层无线 AP", groups: ["无线"] }
+];
+
+/* 触发器（trigger.get 的返回） */
+var TRIGGERS = {};
+function addTrigger(id, hostid, desc, priority, minutesAgo) {
+  var src = HOSTS.filter(function (h) { return h.hostid === hostid; })[0];
+  TRIGGERS[id] = {
+    triggerid: id,
+    description: desc,
+    priority: String(priority),
+    value: "1",
+    lastchange: String(nowSec() - minutesAgo * 60),
+    /* selectHosts 只请求了这三个字段，返回就只有这三个 */
+    hosts: src ? [{ hostid: src.hostid, host: src.host, name: src.name }] : []
+  };
+}
+
+/* 问题（problem.get 的返回）：18 个原生字段全部还原 */
+function mkProblem(o) {
+  return {
+    eventid: o.eventid,
+    source: "0",
+    object: "0",
+    objectid: o.triggerid,
+    clock: String(nowSec() - o.minutesAgo * 60),
+    ns: "412000000",
+    r_eventid: "0",
+    r_clock: "0",
+    r_ns: "0",
+    correlationid: "0",
+    userid: o.ack ? "3" : "0",
+    name: o.name,
+    acknowledged: o.ack ? "1" : "0",
+    severity: String(o.severity),
+    cause_eventid: "0",
+    opdata: o.opdata || "",
+    suppressed: o.suppressed ? "1" : "0",
+    urls: [],
+    tags: o.tags || [{ tag: "scope", value: "availability" }],
+    _ackBy: o.ack ? "张工" : null,
+    _ackCount: o.ack ? 1 : 0
+  };
+}
+
+addTrigger("23891", "10234", "Interface Gi1/0/24(): Link down", 5, 12);
+addTrigger("23892", "10235", "CPU utilization is too high (over 90% for 5m)", 4, 46);
+addTrigger("23893", "10241", "/data: Disk space is low (used > 85%)", 3, 51);
+addTrigger("23894", "10248", "ICMP ping loss is too high (over 3% for 10m)", 3, 246);
+addTrigger("23895", "10255", "UPS on battery power", 2, 380);
+addTrigger("23896", "10261", "MySQL replication lag over 300s", 4, 18);
+addTrigger("23897", "10267", "AP station count over threshold", 1, 132);
+addTrigger("23898", "10234", "Interface Gi1/0/12(): High error rate", 2, 96);
+
+var PROBLEMS = [
+  mkProblem({ eventid: "48213", triggerid: "23891", name: "Interface Gi1/0/24(): Link down", severity: 5, minutesAgo: 12, opdata: "", tags: [{ tag: "scope", value: "availability" }, { tag: "component", value: "network" }] }),
+  mkProblem({ eventid: "48212", triggerid: "23896", name: "MySQL replication lag over 300s", severity: 4, minutesAgo: 18, opdata: "current: 486s", tags: [{ tag: "scope", value: "performance" }] }),
+  mkProblem({ eventid: "48211", triggerid: "23892", name: "CPU utilization is too high (over 90% for 5m)", severity: 4, minutesAgo: 46, ack: true, opdata: "current: 94 %", tags: [{ tag: "scope", value: "performance" }] }),
+  mkProblem({ eventid: "48210", triggerid: "23893", name: "/data: Disk space is low (used > 85%)", severity: 3, minutesAgo: 51, opdata: "current: 87.4 %", tags: [{ tag: "scope", value: "capacity" }] }),
+  mkProblem({ eventid: "48209", triggerid: "23894", name: "ICMP ping loss is too high (over 3% for 10m)", severity: 3, minutesAgo: 246, ack: true, opdata: "current: 3.2 %" }),
+  mkProblem({ eventid: "48208", triggerid: "23895", name: "UPS on battery power", severity: 2, minutesAgo: 380, ack: true, tags: [{ tag: "scope", value: "availability" }, { tag: "component", value: "power" }] }),
+  mkProblem({ eventid: "48207", triggerid: "23898", name: "Interface Gi1/0/12(): High error rate", severity: 2, minutesAgo: 96 }),
+  mkProblem({ eventid: "48206", triggerid: "23897", name: "AP station count over threshold", severity: 1, minutesAgo: 132, ack: true, suppressed: true, tags: [{ tag: "scope", value: "performance" }, { tag: "maintenance", value: "yes" }] })
+];
+
+/* item（item.get 的返回） */
+var ITEMS = [
+  { itemid: "41201", hostid: "10234", name: "Interface Gi1/0/24(): Bits received", key_: "net.if.in[ifHCInOctets.24]", units: "bps", value_type: "3", lastvalue: "335544320", lastclock: String(nowSec() - 30) },
+  { itemid: "41202", hostid: "10234", name: "Interface Gi1/0/24(): Bits sent", key_: "net.if.out[ifHCOutOctets.24]", units: "bps", value_type: "3", lastvalue: "193986560", lastclock: String(nowSec() - 30) },
+  { itemid: "41203", hostid: "10234", name: "Interface Gi1/0/24(): Speed", key_: "net.if.speed[ifHighSpeed.24]", units: "bps", value_type: "3", lastvalue: "1000000000", lastclock: String(nowSec() - 60) }
+];
+
+/* 历史曲线：生成 24h 分钟级采样（真实场景需降采样） */
+function genHistory(base, peakAt, peak) {
+  var out = [], t = nowSec() - 86400;
+  for (var i = 0; i < 288; i++) {
+    var h = (i / 12);
+    var day = Math.sin((h - 6) / 24 * Math.PI * 2) * 0.34 + 0.5;
+    var spike = Math.exp(-Math.pow((h - peakAt) / 1.1, 2)) * 0.62;
+    var noise = (Math.sin(i * 2.7) + Math.cos(i * 1.3)) * 0.035;
+    var v = base * (day + spike + noise);
+    out.push({ itemid: base > 4e8 ? "41201" : "41202", clock: String(t + i * 300), value: String(Math.max(0, Math.round(v))) });
+  }
+  return out;
+}
+var HISTORY = {};
+HISTORY["41201"] = genHistory(3.4e8, 14.3, 4.3e8);
+HISTORY["41202"] = genHistory(1.9e8, 15.1, 2.5e8);
+
+/* 24h 新增问题分桶 */
+var TREND = [2, 1, 1, 0, 1, 2, 3, 6, 9, 14, 8, 4];
+
+/* 告警发送记录（alert.get 的返回） */
+var ALERTS = [
+  { alertid: "9012", eventid: "48213", mediatypeid: "5", clock: String(nowSec() - 700), status: "1", retries: "0", error: "" },
+  { alertid: "9011", eventid: "48213", mediatypeid: "5", clock: String(nowSec() - 690), status: "1", retries: "0", error: "" },
+  { alertid: "9010", eventid: "48212", mediatypeid: "5", clock: String(nowSec() - 1080), status: "2", retries: "3", error: "webhook: connect timeout after 10s" },
+  { alertid: "9009", eventid: "48211", mediatypeid: "5", clock: String(nowSec() - 2760), status: "1", retries: "1", error: "" }
+];
+
+/* 网络映射图（map.get 的返回） */
+var MAPS = [{
+  sysmapid: "12",
+  name: "核心网络拓扑",
+  width: "800",
+  height: "600",
+  selements: [
+    { selementid: "1", elementid: "10234", elementtype: "0", label: "Core-SW-01", x: "340", y: "70", width: "120", height: "44" },
+    { selementid: "2", elementid: "10235", elementtype: "0", label: "FW-Edge-02", x: "340", y: "185", width: "120", height: "44" },
+    { selementid: "3", elementid: "10248", elementtype: "0", label: "RT-Branch-03", x: "340", y: "300", width: "120", height: "44" },
+    { selementid: "4", elementid: "10241", elementtype: "0", label: "SVR-ERP-01", x: "100", y: "440", width: "120", height: "44" },
+    { selementid: "5", elementid: "10261", elementtype: "0", label: "SVR-DB-02", x: "280", y: "440", width: "120", height: "44" },
+    { selementid: "6", elementid: "10267", elementtype: "0", label: "AP-Floor3-07", x: "460", y: "440", width: "120", height: "44" },
+    { selementid: "7", elementid: "10255", elementtype: "0", label: "UPS-Room-01", x: "640", y: "440", width: "120", height: "44" }
+  ],
+  links: [
+    { linkid: "1", selementid1: "1", selementid2: "2", drawtype: "0", color: "00AA00", linktriggers: [] },
+    { linkid: "2", selementid1: "2", selementid2: "3", drawtype: "0", color: "00AA00", linktriggers: [] },
+    /* 该链路绑定触发器，触发后按 linktrigger.color 变色 —— 这是 Zabbix 的真实机制 */
+    { linkid: "3", selementid1: "3", selementid2: "4", drawtype: "0", color: "00AA00",
+      linktriggers: [{ linktriggerid: "1", triggerid: "23893", color: "E45959", drawtype: "0" }] },
+    { linkid: "4", selementid1: "3", selementid2: "5", drawtype: "0", color: "00AA00", linktriggers: [] },
+    { linkid: "5", selementid1: "3", selementid2: "6", drawtype: "0", color: "00AA00", linktriggers: [] },
+    { linkid: "6", selementid1: "3", selementid2: "7", drawtype: "0", color: "00AA00", linktriggers: [] }
+  ]
+}];
+
+var HOST_COUNT = { total: "86", byType: { network: 24, server: 18, other: 44 } };
+
+/* ---------------- 演示 RPC 分发：返回结构必须与真实一致 ---------------- */
+function demoRpc(method, params) {
+  return new Promise(function (resolve, reject) {
+    setTimeout(function () {
+      try { resolve(route(method, params)); } catch (e) { reject(e); }
+    }, 60 + Math.random() * 130);
+  });
+}
+
+function route(method, params) {
+  params = params || {};
+
+  if (method === "apiinfo.version") return "7.0.11";
+
+  if (method === "problem.get") {
+    var rows = PROBLEMS.slice();
+    if (params.severities && params.severities.length) {
+      rows = rows.filter(function (p) { return params.severities.indexOf(Number(p.severity)) >= 0; });
+    }
+    if (params.acknowledged === false) rows = rows.filter(function (p) { return p.acknowledged === "0"; });
+    if (params.acknowledged === true) rows = rows.filter(function (p) { return p.acknowledged === "1"; });
+    if (params.suppressed === false) rows = rows.filter(function (p) { return p.suppressed === "0"; });
+    if (params.search && params.search.name) {
+      var q = params.search.name.toLowerCase();
+      rows = rows.filter(function (p) { return p.name.toLowerCase().indexOf(q) >= 0; });
+    }
+    if (typeof params.limit === "number") rows = rows.slice(0, params.limit);
+    if (params.countOutput) return String(rows.length);
+    return rows;
+  }
+
+  if (method === "trigger.get") {
+    var ids = (params.triggerids || []).map(String);
+    return ids.map(function (id) { return TRIGGERS[id]; }).filter(Boolean);
+  }
+
+  if (method === "host.get") {
+    if (params.countOutput) return HOST_COUNT.total;
+    return HOSTS;
+  }
+
+  if (method === "hostgroup.get") {
+    var g = {};
+    HOSTS.forEach(function (h) { h.groups.forEach(function (n) { g[n] = (g[n] || 0) + 1; }); });
+    return Object.keys(g).map(function (n, i) { return { groupid: String(i + 1), name: n }; });
+  }
+
+  if (method === "item.get") {
+    if (params.hostids) return ITEMS.filter(function (it) { return params.hostids.indexOf(it.hostid) >= 0; });
+    return ITEMS;
+  }
+
+  if (method === "history.get") {
+    var id = String(params.itemids[0]);
+    var arr = (HISTORY[id] || []).slice();
+    if (params.time_from) arr = arr.filter(function (r) { return Number(r.clock) >= params.time_from; });
+    if (typeof params.limit === "number") arr = arr.slice(-params.limit);
+    return arr;
+  }
+
+  if (method === "event.get") {
+    return PROBLEMS.map(function (p) {
+      return { eventid: p.eventid, clock: p.clock, name: p.name, severity: p.severity, source: "0", object: "0" };
+    });
+  }
+
+  if (method === "alert.get") return ALERTS;
+
+  if (method === "map.get") return MAPS;
+
+  if (method === "event.acknowledge") {
+    var out = {};
+    (params.eventids || []).forEach(function (id) {
+      out[id] = { eventid: id };
+      var p = PROBLEMS.filter(function (x) { return x.eventid === id; })[0];
+      if (p) { p.acknowledged = "1"; p._ackBy = "当前用户"; p.userid = "1"; p._ackCount = Number(p._ackCount) + 1; }
+    });
+    return out;
+  }
+
+  throw new Error("演示模式未实现的方法：" + method);
+}
+
+/* =====================================================================
+   2. 通用工具
+   ===================================================================== */
+
+function h(s) {
+  return String(s === undefined || s === null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function pad(n) { return n < 10 ? "0" + n : "" + n; }
+
+function fmtClock(sec) {
+  var d = new Date(Number(sec) * 1000);
+  return pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+
+function fmtDuration(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  var d = Math.floor(sec / 86400), hh = Math.floor((sec % 86400) / 3600),
+      mm = Math.floor((sec % 3600) / 60);
+  if (d > 0) return d + "d " + hh + "h";
+  if (hh > 0) return hh + "h " + pad(mm) + "m";
+  return mm + "m";
+}
+
+function fmtBits(v) {
+  v = Number(v);
+  if (!isFinite(v)) return "—";
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + " Gbps";
+  if (v >= 1e6) return (v / 1e6).toFixed(1) + " Mbps";
+  if (v >= 1e3) return (v / 1e3).toFixed(0) + " Kbps";
+  return v.toFixed(0) + " bps";
+}
+
+var toastEl = document.getElementById("toast"), toastTimer = null;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 2600);
+}
+
+/* 抽屉 */
+var mask = document.getElementById("mask");
+function openDrawer(el) { el.classList.add("show"); mask.classList.add("show"); }
+function closeDrawers() {
+  ["detailDrawer", "connDrawer"].forEach(function (id) {
+    document.getElementById(id).classList.remove("show");
+  });
+  mask.classList.remove("show");
+}
+mask.addEventListener("click", closeDrawers);
+document.getElementById("drawerClose").addEventListener("click", closeDrawers);
+document.getElementById("connClose").addEventListener("click", closeDrawers);
+
+/* 高亮 JSON */
+function jsonHtml(obj) {
+  var s = JSON.stringify(obj, null, 2);
+  s = h(s);
+  s = s.replace(/"([^"]+)":/g, '<span class="k">"$1"</span>:');
+  s = s.replace(/: "([^"]*)"/g, ': <span class="s">"$1"</span>');
+  s = s.replace(/: (-?\d+\.?\d*)/g, ': <span class="n">$1</span>');
+  return s;
+}
+
+/* =====================================================================
+   3. 状态
+   ===================================================================== */
+
+var STATE = {
+  problems: [],
+  triggers: {},
+  filter: { sev: [], unack: false, suppressed: false, group: "0", search: "" },
+  limit: 100,
+  totalAll: null
+};
+
+/* =====================================================================
+   4. 问题页
+   ===================================================================== */
+
+function apiParams() {
+  var p = {
+    output: "extend",
+    selectTags: "extend",
+    selectAcknowledges: ["acknowledgeid", "userid", "clock", "message"],
+    sortfield: ["eventid"],
+    sortorder: "DESC",
+    limit: STATE.limit
+  };
+  if (STATE.filter.sev.length) p.severities = STATE.filter.sev.slice();
+  if (STATE.filter.unack) p.acknowledged = false;
+  if (!STATE.filter.suppressed) p.suppressed = false;
+  if (STATE.filter.search) p.search = { name: STATE.filter.search };
+  if (STATE.filter.group !== "0") p.groupids = [STATE.filter.group];
+  return p;
+}
+
+function loadProblems() {
+  CHAIN = [];
+  var btn = document.getElementById("refreshBtn");
+  btn.classList.add("loading");
+
+  /* 两个调用并行：列表 + 全量口径计数（统计卡不能跟着筛选变） */
+  return Promise.all([
+    call("problem.get", apiParams()),
+    call("problem.get", { countOutput: true, output: ["eventid"] }).catch(function () { return null; })
+  ]).then(function (res) {
+    var rows = res[0] || [];
+    STATE.totalAll = res[1] === null ? rows.length : Number(res[1]);
+    STATE.problems = rows;
+
+    /* 真实的二次 join：problem.get 不返回 host */
+    var tids = [];
+    STATE.problems.forEach(function (p) {
+      if (tids.indexOf(p.objectid) < 0) tids.push(p.objectid);
+    });
+    if (!tids.length) return [];
+
+    return call("trigger.get", {
+      triggerids: tids,
+      output: ["triggerid", "description", "priority", "value", "lastchange"],
+      selectHosts: ["hostid", "host", "name"]
+    }).then(function (trs) {
+      STATE.triggers = {};
+      (trs || []).forEach(function (t) { STATE.triggers[t.triggerid] = t; });
+      return trs;
+    });
+  }).then(function () {
+    renderProblems();
+    renderStats();
+    renderChain();
+    btn.classList.remove("loading");
+  }).catch(function (e) {
+    btn.classList.remove("loading");
+    toast("取数失败：" + e.message);
+    console.error(e);
+  });
+}
+
+function hostOf(p) {
+  var t = STATE.triggers[p.objectid];
+  if (!t || !t.hosts || !t.hosts.length) return { host: "—", name: "—", hostid: "" };
+  return t.hosts[0];
+}
+
+function renderProblems() {
+  var tbody = document.getElementById("problemRows");
+  var rows = STATE.problems;
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#9AA5B1; padding:40px 0; font-size:13px;">当前筛选条件下没有问题</td></tr>';
+  } else {
+    tbody.innerHTML = rows.map(function (p) {
+      var sev = Number(p.severity);
+      var hostInfo = hostOf(p);
+      var dur = nowSec() - Number(p.clock);
+      var isAlert = sev >= 4;
+      var ack = p.acknowledged === "1";
+
+      return '<tr data-eventid="' + h(p.eventid) + '"' + (isAlert ? ' class="alert"' : '') + '>' +
+        '<td style="color:#6B7A8A; font-variant-numeric:tabular-nums;">' + fmtClock(p.clock) + '</td>' +
+        '<td><span class="pill s' + sev + '">' + SEV_NAME[sev] + '</span></td>' +
+        '<td title="hostid ' + h(hostInfo.hostid) + '">' + h(hostInfo.name || hostInfo.host) + '</td>' +
+        '<td class="problem">' + h(p.name) +
+          (p.opdata ? '<span class="op">' + h(p.opdata) + '</span>' : '') +
+          (p.suppressed === "1" ? ' <span class="badge b-info" style="margin-left:4px;">维护抑制</span>' : '') +
+        '</td>' +
+        '<td style="font-variant-numeric:tabular-nums;">' + fmtDuration(dur) + '</td>' +
+        '<td><span class="ack"><i class="dot ' + (ack ? 'd-green' : 'd-red') + '"></i>' + (ack ? "已确认" : "未确认") + '</span></td>' +
+        '<td>' + (ack
+          ? '<button class="row-btn" disabled>已确认</button>'
+          : '<button class="row-btn" data-ack="' + h(p.eventid) + '">确认</button>') +
+        '</td>' +
+      '</tr>';
+    }).join("");
+  }
+
+  var total = rows.length;
+  var unack = rows.filter(function (p) { return p.acknowledged === "0"; }).length;
+  var crit = rows.filter(function (p) { return Number(p.severity) >= 4; }).length;
+
+  document.getElementById("sumLine1").textContent =
+    "共 " + total + " 条活动问题" + (unack ? "，" + unack + " 条未确认" : "，全部已确认");
+  document.getElementById("sumLine2").textContent =
+    "其中严重及以上 " + crit + " 条 · 查询参数 limit=" + STATE.limit + "（Zabbix 无 offset，深分页需 eventid_till 游标）";
+
+  document.getElementById("pager").innerHTML =
+    '<span>1–' + total + " / " + total + '</span>' +
+    '<button disabled>上一页</button><button disabled>下一页</button>';
+}
+
+function renderStats() {
+  var rows = STATE.problems;
+  var unack = rows.filter(function (p) { return p.acknowledged === "0"; }).length;
+  var crit = rows.filter(function (p) { return Number(p.severity) >= 4; }).length;
+
+  document.getElementById("statHosts").textContent = HOST_COUNT.total;
+  document.getElementById("statHostsSub").textContent =
+    "网络设备 " + HOST_COUNT.byType.network + " · 服务器 " + HOST_COUNT.byType.server + " · 其他 " + HOST_COUNT.byType.other;
+
+  document.getElementById("statProblems").textContent = (STATE.totalAll === null ? rows.length : STATE.totalAll);
+  document.getElementById("statProblemsSub").textContent =
+    (STATE.totalAll !== null && STATE.totalAll !== rows.length)
+      ? "当前筛选显示 " + rows.length + " 条" + (crit ? "，严重及以上 " + crit + " 条" : "")
+      : (crit ? "严重及以上 " + crit + " 条，需优先处理" : "当前无严重告警");
+
+  document.getElementById("statUnack").textContent = unack;
+  document.getElementById("statUnackSub").textContent =
+    unack ? "占当前问题 " + Math.round(unack / Math.max(1, rows.length) * 100) + "%" : "全部已确认";
+
+  var ok = ALERTS.filter(function (a) { return a.status === "1"; }).length;
+  var fail = ALERTS.filter(function (a) { return a.status === "2"; }).length;
+  document.getElementById("statAlerts").textContent = ok;
+  document.getElementById("statAlertsSub").textContent =
+    fail ? "企业微信失败 " + fail + " 条，可在告警详情查看原因" : "企业微信送达正常";
+
+  /* 严重度分布 */
+  var counts = [0, 0, 0, 0, 0, 0];
+  rows.forEach(function (p) { counts[Number(p.severity)]++; });
+  var max = Math.max.apply(null, counts) || 1;
+
+  document.getElementById("sevList").innerHTML = counts.map(function (c, i) {
+    var w = (c / max) * 100;
+    return '<div class="sev-row">' +
+      '<span class="name">' + SEV_NAME[i] + '</span>' +
+      '<span class="track"><span class="fill" style="width:' + (c ? Math.max(4, w) : 0) + '%; background:' + SEV_COLOR[i] + '"></span></span>' +
+      '<span class="num' + (c ? '' : ' zero') + '">' + c + '</span>' +
+    '</div>';
+  }).join("");
+
+  /* 24h 趋势 */
+  var maxT = Math.max.apply(null, TREND) || 1;
+  document.getElementById("alertBars").innerHTML = TREND.map(function (v, i) {
+    var hgt = v === 0 ? 3 : Math.max(6, (v / maxT) * 118);
+    var col = v >= 12 ? SEV_COLOR[5] : v >= 8 ? SEV_COLOR[4] : v >= 4 ? SEV_COLOR[2] : "#8FCFDA";
+    return '<div class="bar-col">' +
+      '<div class="bar" style="height:' + hgt + 'px; background:' + col + '" title="' + pad(i * 2) + ':00 — ' + v + ' 条"></div>' +
+      '<span class="bar-label">' + pad(i * 2) + '</span>' +
+    '</div>';
+  }).join("");
+
+  var peak = TREND.indexOf(maxT);
+  document.getElementById("trendSub").textContent =
+    "峰值 " + maxT + " 条出现在 " + pad(peak * 2) + ":00–" + pad(peak * 2 + 2) + ":00，与核心交换机链路故障时段吻合";
+}
+
+function renderChain() {
+  var list = document.getElementById("chainList");
+  var totalMs = CHAIN.reduce(function (a, c) { return a + c.ms; }, 0);
+
+  document.getElementById("chainMeta").textContent = CHAIN.length + " 次请求 · " + totalMs + " ms";
+
+  list.innerHTML = CHAIN.map(function (c, i) {
+    var metaTxt = c.kind === "list" ? (c.count + " 条返回")
+                : c.kind === "count" ? ("countOutput = " + c.count)
+                : "1 个对象";
+    return '<div class="chain-step">' +
+      '<span class="chain-num">' + (i + 1) + '</span>' +
+      '<div class="chain-body">' +
+        '<div class="chain-method">' + h(c.method) + '</div>' +
+        '<div class="chain-meta">' + metaTxt + ' · ' + c.ms + ' ms</div>' +
+        '<div class="chain-code">' + h(JSON.stringify(c.params, null, 2)) + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join("") || '<div style="font-size:12px; color:#9AA5B1;">刷新后显示调用链</div>';
+}
+
+/* 确认操作：真实走 event.acknowledge */
+function acknowledge(eventid) {
+  var p = STATE.problems.filter(function (x) { return x.eventid === eventid; })[0];
+  if (!p) return;
+
+  var msg = window.prompt("确认该问题并留言（写入 Zabbix 审计记录）：", "已介入排查");
+  if (msg === null) return;
+
+  call("event.acknowledge", {
+    eventids: [eventid],
+    action: 6,           /* 0x02 ACKNOWLEDGE | 0x04 MESSAGE */
+    message: msg || "已确认"
+  }).then(function () {
+    toast("已确认，action=6（确认 + 留言）");
+    return loadProblems();
+  }).then(function () {
+    var row = document.querySelector('tr[data-eventid="' + eventid + '"]');
+    if (row) row.classList.add("flash");
+  }).catch(function (e) {
+    toast("确认失败：" + e.message);
+  });
+}
+
+/* 行事件委托 */
+document.getElementById("problemRows").addEventListener("click", function (e) {
+  var ackBtn = e.target.closest("[data-ack]");
+  if (ackBtn) {
+    e.stopPropagation();
+    acknowledge(ackBtn.getAttribute("data-ack"));
+    return;
+  }
+  var tr = e.target.closest("tr[data-eventid]");
+  if (tr) showDetail(tr.getAttribute("data-eventid"));
+});
+
+/* 详情抽屉 */
+function showDetail(eventid) {
+  var p = STATE.problems.filter(function (x) { return x.eventid === eventid; })[0];
+  if (!p) return;
+  var t = STATE.triggers[p.objectid] || {};
+  var hostInfo = hostOf(p);
+
+  document.getElementById("drawerEventId").textContent = "eventid " + p.eventid;
+  document.querySelector("#detailDrawer .drawer-head h3").textContent = p.name;
+
+  var d = document.getElementById("drawerBody");
+  d.innerHTML =
+    '<dl class="kv">' +
+      '<dt>主机</dt><dd>' + h(hostInfo.name) + ' <span class="item-key">' + h(hostInfo.host) + '</span></dd>' +
+      '<dt>严重度</dt><dd><span class="pill s' + Number(p.severity) + '">' + SEV_NAME[Number(p.severity)] + '</span></dd>' +
+      '<dt>发生时间</dt><dd>' + fmtClock(p.clock) + '（持续 ' + fmtDuration(nowSec() - Number(p.clock)) + '）</dd>' +
+      '<dt>确认状态</dt><dd>' + (p.acknowledged === "1" ? "已确认" + (p._ackBy ? " · " + h(p._ackBy) : "") : "未确认") + '</dd>' +
+      '<dt>触发器</dt><dd><span class="item-key">triggerid ' + h(p.objectid) + '</span></dd>' +
+      '<dt>抑制</dt><dd>' + (p.suppressed === "1" ? "维护期抑制中" : "否") + '</dd>' +
+      '<dt>标签</dt><dd>' + (p.tags || []).map(function (tg) {
+        return '<span class="badge b-info" style="margin-right:4px;">' + h(tg.tag) + (tg.value ? ":" + h(tg.value) : "") + '</span>';
+      }).join("") + '</dd>' +
+    '</dl>' +
+
+    '<h4>problem.get 原始响应</h4>' +
+    '<pre class="json">' + jsonHtml(p) + '</pre>' +
+
+    '<h4>关联的 trigger.get（主机名来自这里）</h4>' +
+    '<pre class="json">' + jsonHtml(t) + '</pre>' +
+
+    '<h4>通知记录 alert.get</h4>' +
+    '<div style="font-size:12.5px; line-height:1.9;">' +
+      (ALERTS.filter(function (a) { return a.eventid === p.eventid; }).map(function (a) {
+        var st = a.status === "1" ? '<span class="badge b-ok">已发送</span>'
+               : a.status === "2" ? '<span class="badge b-no">失败 · 重试 ' + a.retries + ' 次</span>'
+               : '<span class="badge b-work">待发送</span>';
+        return '<div>' + fmtClock(a.clock) + ' · 企业微信 ' + st +
+          (a.error ? '<div style="color:#A72B2B; font-size:11.5px; margin-top:2px;">' + h(a.error) + '</div>' : '') + '</div>';
+      }).join("") || '<span style="color:#9AA5B1;">暂无发送记录</span>') +
+    '</div>';
+
+  openDrawer(document.getElementById("detailDrawer"));
+}
+
+/* 筛选交互 */
+document.getElementById("filterBar").addEventListener("click", function (e) {
+  var chip = e.target.closest(".chip");
+  if (!chip) return;
+
+  if (chip.dataset.sev) {
+    var v = Number(chip.dataset.sev);
+    var i = STATE.filter.sev.indexOf(v);
+    if (i >= 0) STATE.filter.sev.splice(i, 1); else STATE.filter.sev.push(v);
+    chip.classList.toggle("on");
+  } else if (chip.dataset.filter === "unack") {
+    STATE.filter.unack = !STATE.filter.unack;
+    chip.classList.toggle("on");
+  } else if (chip.dataset.filter === "suppressed") {
+    STATE.filter.suppressed = !STATE.filter.suppressed;
+    chip.classList.toggle("on");
+  } else if (chip.dataset.group) {
+    STATE.filter.group = chip.dataset.group;
+    document.querySelectorAll('[data-group]').forEach(function (c) { c.classList.remove("on"); });
+    chip.classList.add("on");
+  }
+
+  updateApiHint();
+  loadProblems();
+});
+
+var searchTimer = null;
+document.getElementById("searchInput").addEventListener("input", function (e) {
+  clearTimeout(searchTimer);
+  var v = e.target.value.trim();
+  searchTimer = setTimeout(function () {
+    STATE.filter.search = v;
+    updateApiHint();
+    loadProblems();
+  }, 320);
+});
+
+function updateApiHint() {
+  var p = apiParams();
+  var parts = ["output:extend"];
+  if (p.severities) parts.push("severities:[" + p.severities.join(",") + "]");
+  if (p.acknowledged === false) parts.push("acknowledged:false");
+  if (p.suppressed === false) parts.push("suppressed:false");
+  if (p.search) parts.push('search:{name:"' + p.search.name + '"}');
+  parts.push("limit:" + p.limit);
+  document.getElementById("apiHint").textContent = "problem.get";
+  document.getElementById("apiHint").title = "problem.get(" + parts.join(", ") + ")";
+}
+
+/* =====================================================================
+   5. 图形页
+   ===================================================================== */
+
+var GRAPH = { itemIn: "41201", itemOut: "41202" };
+
+function loadGraph() {
+  Promise.all([
+    call("item.get", { itemids: ["41201", "41202", "41203"], output: ["itemid", "name", "key_", "units", "value_type", "lastvalue", "lastclock", "hostid"] }),
+    call("history.get", { itemids: ["41201"], history: 3, time_from: nowSec() - 86400, time_till: nowSec(), sortfield: "clock", sortorder: "ASC", limit: 288 }),
+    call("history.get", { itemids: ["41202"], history: 3, time_from: nowSec() - 86400, time_till: nowSec(), sortfield: "clock", sortorder: "ASC", limit: 288 })
+  ]).then(function (res) {
+    var items = res[0] || [];
+    var inItem = items.filter(function (i) { return i.itemid === "41201"; })[0] || ITEMS[0];
+    var outItem = items.filter(function (i) { return i.itemid === "41202"; })[0] || ITEMS[1];
+    var speedItem = items.filter(function (i) { return i.itemid === "41203"; })[0] || ITEMS[2];
+
+    document.getElementById("graphTitle").textContent = "Core-SW-01 · 端口 Gi1/0/24 流量";
+    document.getElementById("itemSelect").textContent = inItem.name;
+    document.getElementById("itemKey").textContent = inItem.key_ + "   ·   " + outItem.key_;
+
+    drawChart(res[1] || [], res[2] || []);
+    renderHostProblems(inItem.hostid);
+    renderItemMeta(inItem);
+
+    var inV = Number(inItem.lastvalue), outV = Number(outItem.lastvalue), spV = Number(speedItem.lastvalue);
+    var util = Math.round(inV / spV * 100);
+
+    document.getElementById("itemStats").innerHTML =
+      '<div><div class="k">当前入向</div><div class="v">' + fmtBits(inV).split(" ")[0] + '<small>' + fmtBits(inV).split(" ")[1] + '</small></div></div>' +
+      '<div><div class="k">当前出向</div><div class="v">' + fmtBits(outV).split(" ")[0] + '<small>' + fmtBits(outV).split(" ")[1] + '</small></div></div>' +
+      '<div><div class="k">端口带宽</div><div class="v">1<small>Gbps</small></div></div>' +
+      '<div><div class="k">带宽利用率</div><div class="v' + (util > 40 ? " v-hot" : "") + '">' + util + '<small>%</small></div></div>';
+  }).catch(function (e) {
+    toast("图形取数失败：" + e.message);
+  });
+}
+
+/* 右侧：指标元信息（对接时真正要看的字段） */
+function renderItemMeta(item) {
+  var VT = { "0": "float", "1": "character", "2": "log", "3": "unsigned", "4": "text" };
+  var el = document.getElementById("itemMeta");
+  el.innerHTML = '<dl class="kv">' +
+    '<dt>itemid</dt><dd><span class="item-key">' + h(item.itemid) + '</span></dd>' +
+    '<dt>value_type</dt><dd><span class="item-key">' + h(item.value_type) + '</span> · ' + h(VT[item.value_type] || "?") +
+      '（<code class="mono">history.get</code> 必须带此值）</dd>' +
+    '<dt>units</dt><dd>' + h(item.units) + '</dd>' +
+    '<dt>最近取值</dt><dd>' + fmtBits(item.lastvalue) + ' @ ' + fmtClock(item.lastclock) + '</dd>' +
+    '<dt>更新间隔</dt><dd><span class="item-key">60s</span> · 由 item 配置决定，非 API 参数</dd>' +
+  '</dl>';
+}
+
+/* 右侧：该主机当前问题（同一个 problem.get + trigger.get 结果，按 hostid 过滤） */
+function renderHostProblems(hostid) {
+  var host = HOSTS.filter(function (x) { return x.hostid === hostid; })[0] || {};
+  document.getElementById("graphHostLine").textContent =
+    (host.name || "—") + "  ·  hostid " + hostid + "  ·  数据按 trigger.get 的 selectHosts 关联";
+
+  var rows = STATE.problems.filter(function (p) {
+    var t = STATE.triggers[p.objectid];
+    return t && t.hosts && t.hosts[0] && t.hosts[0].hostid === hostid;
+  });
+
+  var el = document.getElementById("hostProblems");
+  if (!rows.length) {
+    el.innerHTML = '<div style="font-size:12.5px; color:#9AA5B1; padding:12px 10px;">该主机当前无活动问题</div>';
+    return;
+  }
+
+  el.innerHTML = rows.map(function (p) {
+    var sev = Number(p.severity);
+    return '<div class="hp-row">' +
+      '<span class="pill s' + sev + '" style="min-width:52px;">' + SEV_NAME[sev] + '</span>' +
+      '<span class="hp-name">' + h(p.name) + '</span>' +
+      '<span class="hp-dur">' + fmtDuration(nowSec() - Number(p.clock)) + '</span>' +
+    '</div>';
+  }).join("");
+}
+
+function drawChart(inRows, outRows) {
+  var W = 720, H = 290;
+  var padL = 56, padR = 20, padT = 34, padB = 34;
+  var plotW = W - padL - padR, plotH = H - padT - padB;
+  var baseY = padT + plotH;
+
+  var n = inRows.length || 1;
+  var maxV = Math.max.apply(null, inRows.concat(outRows).map(function (r) { return Number(r.value); }).concat([1]));
+  maxV = maxV * 1.14;
+
+  function xOf(i) { return padL + (i / (n - 1 || 1)) * plotW; }
+  function yOf(v) { return padT + plotH * (1 - v / maxV); }
+
+  var pIn = inRows.map(function (r, i) { return { x: xOf(i), y: yOf(Number(r.value)) }; });
+  var pOut = outRows.map(function (r, i) { return { x: xOf(i), y: yOf(Number(r.value)) }; });
+
+  /* 降采样到 ~60 点，和真实场景一致 */
+  function reduce(p) {
+    if (p.length <= 60) return p;
+    var step = p.length / 60, out = [];
+    for (var i = 0; i < 60; i++) out.push(p[Math.floor(i * step)]);
+    out.push(p[p.length - 1]);
+    return out;
+  }
+  pIn = reduce(pIn); pOut = reduce(pOut);
+
+  function smooth(p) {
+    var d = "M " + p[0].x.toFixed(1) + " " + p[0].y.toFixed(1);
+    for (var i = 1; i < p.length; i++) {
+      var a = p[i - 1], b = p[i], mx = ((a.x + b.x) / 2).toFixed(1);
+      d += " C " + mx + " " + a.y.toFixed(1) + ", " + mx + " " + b.y.toFixed(1) + ", " + b.x.toFixed(1) + " " + b.y.toFixed(1);
+    }
+    return d;
+  }
+
+  var lineIn = smooth(pIn), lineOut = smooth(pOut);
+  var areaIn = lineIn + " L " + pIn[pIn.length - 1].x.toFixed(1) + " " + baseY + " L " + pIn[0].x.toFixed(1) + " " + baseY + " Z";
+  var areaOut = lineOut + " L " + pOut[pOut.length - 1].x.toFixed(1) + " " + baseY + " L " + pOut[0].x.toFixed(1) + " " + baseY + " Z";
+
+  var s = '<defs>' +
+    '<linearGradient id="gIn" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#22B07D" stop-opacity="0.2"/><stop offset="100%" stop-color="#22B07D" stop-opacity="0.01"/></linearGradient>' +
+    '<linearGradient id="gOut" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4A90E2" stop-opacity="0.15"/><stop offset="100%" stop-color="#4A90E2" stop-opacity="0.01"/></linearGradient>' +
+  '</defs>';
+
+  [0, 0.25, 0.5, 0.75, 1].forEach(function (f) {
+    var v = maxV * f, y = yOf(v);
+    s += '<line x1="' + padL + '" y1="' + y + '" x2="' + (padL + plotW) + '" y2="' + y + '" stroke="#EEF2F6"/>';
+    s += '<text x="' + (padL - 9) + '" y="' + (y + 3.5) + '" text-anchor="end" font-size="10.5" fill="#9AA5B1">' + Math.round(v / 1e6) + '</text>';
+  });
+  s += '<text x="' + (padL - 9) + '" y="' + (padT - 12) + '" text-anchor="end" font-size="10" fill="#9AA5B1">Mbps</text>';
+
+  var d0 = new Date((nowSec() - 86400) * 1000);
+  for (var t = 0; t <= 4; t++) {
+    var x = padL + (t / 4) * plotW;
+    var dd = new Date(d0.getTime() + t * 6 * 3600 * 1000);
+    var lab = (t === 0)
+      ? pad(dd.getMonth() + 1) + "-" + pad(dd.getDate()) + " " + pad(dd.getHours()) + ":00"
+      : pad(dd.getHours()) + ":00";
+    var anchor = t === 0 ? "start" : (t === 4 ? "end" : "middle");
+    s += '<text x="' + x + '" y="' + (baseY + 19) + '" text-anchor="' + anchor + '" font-size="10.5" fill="#9AA5B1">' + lab + '</text>';
+  }
+
+  s += '<path d="' + areaOut + '" fill="url(#gOut)"/>';
+  s += '<path d="' + areaIn + '" fill="url(#gIn)"/>';
+  s += '<path d="' + lineOut + '" fill="none" stroke="#4A90E2" stroke-width="1.8" stroke-linecap="round"/>';
+  s += '<path d="' + lineIn + '" fill="none" stroke="#22B07D" stroke-width="1.8" stroke-linecap="round"/>';
+
+  /* 峰值：在降采样后的曲线上取最高点，避免标注与曲线错位 */
+  var top = pIn[0];
+  pIn.forEach(function (p) { if (p.y < top.y) top = p; });
+  var maxVal = 0;
+  inRows.forEach(function (r) { maxVal = Math.max(maxVal, Number(r.value)); });
+
+  if (maxVal > 0) {
+    var px = top.x, py = top.y;
+    var lx = Math.min(Math.max(px, padL + 78), padL + plotW - 78);
+    var ly = py - 40 < 6 ? py + 14 : py - 40;
+    s += '<line x1="' + px + '" y1="' + py + '" x2="' + px + '" y2="' + baseY + '" stroke="#94A3B8" stroke-dasharray="4 4"/>';
+    s += '<rect x="' + (lx - 74) + '" y="' + ly + '" width="148" height="24" rx="12" fill="#2E3B4E"/>';
+    s += '<text x="' + lx + '" y="' + (ly + 16) + '" text-anchor="middle" font-size="11" fill="#fff">峰值 ' + fmtBits(maxVal) + '</text>';
+  }
+
+  /* 告警标注：取 24h 内的问题时间点 */
+  var alertP = STATE.problems.filter(function (p) { return Number(p.severity) >= 4; })[0];
+  if (alertP) {
+    var ratio = (Number(alertP.clock) - (nowSec() - 86400)) / 86400;
+    if (ratio > 0.02 && ratio < 0.98) {
+      var ax = padL + ratio * plotW;
+      s += '<rect x="' + (ax - 62) + '" y="' + (baseY - 96) + '" width="124" height="22" rx="5" fill="#FFF4F0" stroke="#F0A08A"/>';
+      s += '<text x="' + ax + '" y="' + (baseY - 81) + '" text-anchor="middle" font-size="10.5" fill="#C2410C">link down 触发</text>';
+    }
+  }
+
+  document.getElementById("trafficChart").innerHTML = s;
+}
+
+/* =====================================================================
+   6. 拓扑页（map.get 渲染）
+   ===================================================================== */
+
+var TOPO = { mapid: "12", sel: null };
+
+function loadTopo() {
+  /* 节点上色依赖问题列表与 trigger 关联，先确保已加载，避免重复请求 */
+  var ready = (STATE.problems.length && Object.keys(STATE.triggers).length)
+    ? Promise.resolve()
+    : loadProblems();
+
+  ready.then(function () {
+    CHAIN = [];
+    return call("map.get", {
+      sysmapids: [TOPO.mapid],
+      selectSelements: "extend",
+      selectLinks: "extend",
+      selectLinkTriggers: ["linktriggerid", "triggerid", "color", "drawtype"],
+      selectUrls: "extend"
+    });
+  })
+    .then(function (maps) {
+      var m = (maps || [])[0];
+      if (!m) { toast("未找到网络映射图"); return; }
+
+      document.getElementById("mapTitle").textContent = m.name;
+      document.getElementById("mapMeta").textContent =
+        "sysmapid " + m.sysmapid + " · 画布 " + m.width + "×" + m.height + " · " +
+        (m.selements || []).length + " 个元素 · " + (m.links || []).length + " 条连线";
+
+      renderTopo(m);
+
+      /* 节点详情用的问题映射：按 host 反查 */
+      document.getElementById("topoCanvas").onclick = function (e) {
+        var g = e.target.closest("[data-selement]");
+        if (!g) return;
+        var sid = g.getAttribute("data-selement");
+        var se = (m.selements || []).filter(function (x) { return x.selementid === sid; })[0];
+        if (se) showNode(se);
+        document.querySelectorAll("#topoCanvas .topo-node").forEach(function (n) { n.classList.remove("sel"); });
+        g.classList.add("sel");
+      };
+
+      /* 默认选中核心交换机 */
+      var first = (m.selements || []).filter(function (s) { return s.elementid === "10234"; })[0] || (m.selements || [])[0];
+      if (first) showNode(first);
+      renderChain();
+    })
+    .catch(function (e) { toast("拓扑取数失败：" + e.message); });
+}
+
+/* 链路状态：sysmap 的 link.color 只是静态样式色，
+   真正的"链路告警变红"来自 linktriggers（需 map.get 带 selectLinkTriggers） */
+function linkState(l) {
+  var trigs = l.linktriggers || [];
+  for (var i = 0; i < trigs.length; i++) {
+    var tid = String(trigs[i].triggerid);
+    var hit = STATE.problems.some(function (p) { return String(p.objectid) === tid; });
+    if (hit) return { color: "#" + String(trigs[i].color || "E45959").replace("#", ""), hot: true };
+  }
+  return { color: "#" + String(l.color || "00AA00").replace("#", ""), hot: false };
+}
+
+function sevOfHost(hostid) {  var max = -1, hit = null;
+  STATE.problems.forEach(function (p) {
+    var t = STATE.triggers[p.objectid];
+    if (!t || !t.hosts || !t.hosts[0] || t.hosts[0].hostid !== hostid) return;
+    if (Number(p.severity) > max) { max = Number(p.severity); hit = p; }
+  });
+  return { sev: max, problem: hit };
+}
+
+function renderTopo(m) {
+  var svg = document.getElementById("topoCanvas");
+  var W = Number(m.width) || 800, H = Number(m.height) || 600;
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.setAttribute("height", "auto");
+
+  var pos = {};
+  (m.selements || []).forEach(function (s) { pos[s.selementid] = s; });
+
+  var s = "";
+
+  /* 背景网格 */
+  for (var gx = 0; gx <= W; gx += 100) {
+    s += '<line x1="' + gx + '" y1="0" x2="' + gx + '" y2="' + H + '" stroke="#F0F4F7"/>';
+  }
+  for (var gy = 0; gy <= H; gy += 100) {
+    s += '<line x1="0" y1="' + gy + '" x2="' + W + '" y2="' + gy + '" stroke="#F0F4F7"/>';
+  }
+
+  /* 连线：sysmap 用正交折线，不使用贝塞尔，避免多条线汇聚成一束 */
+  (m.links || []).forEach(function (l) {
+    var a = pos[l.selementid1], b = pos[l.selementid2];
+    if (!a || !b) return;
+
+    var x1 = Number(a.x) + Number(a.width) / 2, y1 = Number(a.y) + Number(a.height);
+    var x2 = Number(b.x) + Number(b.width) / 2, y2 = Number(b.y);
+    var midY = (y1 + y2) / 2;
+
+    var st = linkState(l);
+    var d;
+
+    if (Math.abs(x1 - x2) < 0.5) {
+      d = "M" + x1 + " " + y1 + " V" + y2;
+    } else {
+      d = "M" + x1 + " " + y1 + " V" + midY + " H" + x2 + " V" + y2;
+    }
+
+    s += '<path class="tn-link' + (st.hot ? " hot" : "") + '" d="' + d + '" stroke="' + st.color + '"' +
+         (st.hot ? ' stroke-width="2.2"' : '') + '/>';
+  });
+
+  /* 节点 */
+  (m.selements || []).forEach(function (se) {
+    var st = sevOfHost(se.elementid);
+    var stroke = st.sev >= 4 ? "#E45959" : st.sev >= 2 ? "#FFC859" : "#CBD6E0";
+    var fill = st.sev >= 4 ? "#FDF3F2" : st.sev >= 2 ? "#FFFBEF" : "#F8FAFC";
+    var dot = st.sev >= 4 ? "#E45959" : st.sev >= 2 ? "#FFC859" : "#22B07D";
+    var x = Number(se.x), y = Number(se.y), w = Number(se.width) || 120, hh = Number(se.height) || 44;
+
+    s += '<g class="topo-node" data-selement="' + h(se.selementid) + '">' +
+      '<rect class="box" x="' + x + '" y="' + y + '" width="' + w + '" height="' + hh + '" rx="8" fill="' + fill + '" stroke="' + stroke + '"/>' +
+      '<text class="tn-text" x="' + (x + w / 2) + '" y="' + (y + hh / 2) + '">' + h(se.label) + '</text>' +
+      '<circle cx="' + (x + w - 10) + '" cy="' + (y + 10) + '" r="4" fill="' + dot + '"/>' +
+    '</g>';
+  });
+
+  svg.innerHTML = s;
+}
+
+function showNode(se) {
+  var host = HOSTS.filter(function (x) { return x.hostid === se.elementid; })[0] || {};
+  var st = sevOfHost(se.elementid);
+  var related = STATE.problems.filter(function (p) {
+    var t = STATE.triggers[p.objectid];
+    return t && t.hosts && t.hosts[0] && t.hosts[0].hostid === se.elementid;
+  });
+
+  document.getElementById("nodeMeta").textContent = "selementid " + se.selementid;
+
+  document.getElementById("nodeDetail").innerHTML =
+    '<dl class="kv">' +
+      '<dt>显示名</dt><dd>' + h(se.label) + '</dd>' +
+      '<dt>主机</dt><dd>' + h(host.name || "—") + ' <span class="item-key">' + h(host.host || "") + '</span></dd>' +
+      '<dt>elementtype</dt><dd><span class="item-key">0 = Host</span>（' + h(se.elementtype) + '）</dd>' +
+      '<dt>画布坐标</dt><dd><span class="item-key">x=' + h(se.x) + ', y=' + h(se.y) + '</span></dd>' +
+      '<dt>最高级别</dt><dd>' + (st.sev >= 0
+        ? '<span class="pill s' + st.sev + '">' + SEV_NAME[st.sev] + '</span>'
+        : '<span class="badge b-ok">无活动问题</span>') + '</dd>' +
+    '</dl>' +
+    '<h4>该 host 当前问题（problem.get）</h4>' +
+    (related.length
+      ? '<div style="font-size:12.5px; line-height:1.85;">' + related.map(function (p) {
+          return '<div style="display:flex; gap:7px; align-items:center; margin-bottom:5px;">' +
+            '<span class="pill s' + Number(p.severity) + '" style="min-width:52px;">' + SEV_NAME[Number(p.severity)] + '</span>' +
+            '<span style="flex:1;">' + h(p.name) + '</span>' +
+            '<span style="color:#9AA5B1; font-size:11px;">' + fmtDuration(nowSec() - Number(p.clock)) + '</span>' +
+          '</div>';
+        }).join("") + '</div>'
+      : '<div style="font-size:12.5px; color:#9AA5B1;">无活动问题</div>') +
+    '<div class="topo-hint" style="margin-top:16px;">' +
+      '说明：原生 map.get 的 selement 只给出 <span class="mono">elementid</span> 与坐标，' +
+      '节点状态需再用 <span class="mono">problem.get(hostids:[elementid])</span> 关联，' +
+      '此处按最高 severity 上色。' +
+    '</div>';
+}
+
+/* =====================================================================
+   7. 连接设置
+   ===================================================================== */
+
+var connPill = document.getElementById("connPill");
+var connDrawer = document.getElementById("connDrawer");
+var connOut = document.getElementById("connOut");
+
+connPill.addEventListener("click", function () { openDrawer(connDrawer); });
+
+document.querySelectorAll('input[name="auth"]').forEach(function (r) {
+  r.addEventListener("change", function () {
+    document.getElementById("authSessionLabel").classList.toggle("on", r.value === "session" && r.checked);
+    document.getElementById("authTokenLabel").classList.toggle("on", r.value === "token" && r.checked);
+    document.getElementById("tokenField").style.display = r.value === "token" ? "block" : "none";
+  });
+});
+
+document.getElementById("testConn").addEventListener("click", function () {
+  var url = document.getElementById("apiUrl").value.trim() || "/api_jsonrpc.php";
+  var auth = document.querySelector('input[name="auth"]:checked').value;
+  var token = document.getElementById("apiToken").value.trim();
+
+  connOut.className = "conn-out";
+  connOut.textContent = "正在连接…";
+
+  var prev = { mode: CFG.mode, apiUrl: CFG.apiUrl, auth: CFG.auth, token: CFG.token };
+  CFG.mode = "live"; CFG.apiUrl = url; CFG.auth = auth; CFG.token = token;
+
+  liveRpc("apiinfo.version", {}).then(function (ver) {
+    return liveRpc("problem.get", { output: ["eventid"], limit: 1 }).then(function () {
+      return ver;
+    });
+  }).then(function (ver) {
+    connOut.className = "conn-out ok";
+    connOut.textContent = "连接成功 · Zabbix API " + ver + " · 数据源已切换为真实实例";
+    connPill.classList.add("live");
+    document.getElementById("connText").textContent = "已连接 · v" + ver;
+    document.getElementById("protoNote").textContent =
+      "真实数据 · " + url + " · " + (auth === "token" ? "API Token" : "复用 zbx_session 会话");
+    toast("已连接 Zabbix " + ver);
+    closeDrawers();
+    CHAIN = [];
+    loadAll();
+  }).catch(function (e) {
+    connOut.className = "conn-out err";
+    connOut.innerHTML = "连接失败：" + h(e.message) +
+      '<div style="margin-top:6px; font-size:11.5px;">若为 CORS 或 401，请改用同域部署，或确认 Token 权限与 Apache 的 Authorization 头转发配置。</div>';
+    CFG.mode = prev.mode; CFG.apiUrl = prev.apiUrl; CFG.auth = prev.auth; CFG.token = prev.token;
+  });
+});
+
+document.getElementById("useDemo").addEventListener("click", function () {
+  CFG.mode = "demo"; CFG.token = "";
+  connPill.classList.remove("live");
+  document.getElementById("connText").textContent = "演示数据";
+  document.getElementById("protoNote").textContent =
+    "演示数据 · 结构与 Zabbix 7.0 API 返回值一致（数值均为字符串），切换右上角可连接真实实例";
+  closeDrawers();
+  toast("已切换到演示数据");
+  loadAll();
+});
+
+/* =====================================================================
+   8. 页签与启动
+   ===================================================================== */
+
+var tabMeta = {
+  problems: { view: "problems", crumb: "Monitoring → Problems" },
+  graphs:   { view: "graphs",   crumb: "Monitoring → Hosts → Core-SW-01 → Graphs" },
+  topo:     { view: "topo",     crumb: "Monitoring → Maps → 核心网络拓扑" },
+  api:      { view: "api",      crumb: "自定义页面 → 接口契约" }
+};
+
+document.querySelectorAll(".tab").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var key = btn.dataset.tab;
+    var meta = tabMeta[key];
+    document.querySelectorAll(".tab").forEach(function (b) { b.classList.remove("active"); });
+    btn.classList.add("active");
+    document.querySelectorAll(".view").forEach(function (v) { v.classList.remove("active"); });
+    document.getElementById("view-" + meta.view).classList.add("active");
+    document.getElementById("crumbs").innerHTML = meta.crumb.split("→").map(function (x) {
+      return "<b>" + x.trim() + "</b>";
+    }).join(" → ");
+    if (history.replaceState) history.replaceState(null, "", "#" + key);
+
+    if (key === "graphs") loadGraph();
+    if (key === "topo") loadTopo();
+    if (key === "api") renderChain();
+  });
+});
+
+document.getElementById("refreshBtn").addEventListener("click", function () {
+  loadAll();
+  toast("已刷新");
+});
+
+function loadAll() {
+  updateApiHint();
+  loadProblems();
+}
+
+/* 启动：先取问题（图形/拓扑/接口页都依赖），再切到目标页签 */
+var initial = (location.hash || "").replace("#", "");
+var initialTab = tabMeta[initial] ? document.querySelector('.tab[data-tab="' + initial + '"]') : null;
+
+loadProblems().then(function () {
+  if (initialTab && initialTab !== document.querySelector('.tab[data-tab="problems"]')) {
+    initialTab.click();
+  }
+});
+
+})();
+</script>
+
+</body>
+</html>

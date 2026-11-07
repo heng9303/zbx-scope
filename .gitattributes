@@ -1,0 +1,21 @@
+# 统一换行与文本判定，避免 macOS / Linux 之间整文件 diff
+* text=auto
+
+*.sh    text eol=lf
+*.py    text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# 压缩过的第三方库不做换行规范化
+*.min.js -text
+
+*.png    binary
+*.jpg    binary
+*.zip    binary
+*.tar.gz binary

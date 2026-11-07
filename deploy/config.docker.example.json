@@ -1,0 +1,48 @@
+{
+  "_note": "复制为 config.json 后填入真实凭据。此文件以只读方式挂载到容器 /app/config.json，不会打进镜像。",
+  "_note_enabled": "enabled=false 的实例不会被加载。实例临时下线时改这一行即可，配置留着，回来改成 true 重启容器生效。",
+  "_note_access": "mode=basic 启用 HTTP Basic Auth（端口绑 0.0.0.0 时强烈建议）；off 为免认证。public_paths 中的路径免认证，/api/ping 必须保留，否则容器健康检查会失败。",
+  "_note_rotate": "audit.jsonl 超过 max_bytes 自动轮转为 .1/.2/...，最多保留 max_files 份旧日志。",
+  "active": "zbx7",
+  "bind": "0.0.0.0",
+  "port": 8770,
+  "timeout": 60,
+  "access": {
+    "mode": "basic",
+    "user": "zbxview",
+    "password": "<填入随机口令>",
+    "public_paths": [
+      "/api/ping"
+    ]
+  },
+  "audit_rotate": {
+    "max_bytes": 5242880,
+    "max_files": 5
+  },
+  "profiles": [
+    {
+      "id": "zbx8",
+      "label": "生产 8.0（临时下线）",
+      "enabled": false,
+      "upstream": "http://10.51.26.102/api_jsonrpc.php",
+      "auth": "token",
+      "token": "<填入 32 字节 API Token>"
+    },
+    {
+      "id": "zbx7",
+      "label": "测试 7.0",
+      "upstream": "http://10.51.26.103/api_jsonrpc.php",
+      "auth": "token",
+      "token": "<填入 32 字节 API Token>"
+    },
+    {
+      "id": "zbx4",
+      "label": "测试 4.0",
+      "upstream": "http://10.51.31.201/zabbix/api_jsonrpc.php",
+      "auth": "login",
+      "user": "test",
+      "password": "<填入密码>",
+      "timeout": 30
+    }
+  ]
+}

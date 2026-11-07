@@ -1,0 +1,39 @@
+# ============================================================
+# 绝不入库：凭据 / 运行时数据 / 生成物
+# 原则：源码 + 权威文档入库；快照、交付包、凭据、审计日志不入库
+# ============================================================
+
+# --- 凭据（含真实 token / 只读账号口令 / Basic Auth 口令）---
+real/config.json
+**/config.json
+*.secret.json
+.env
+.env.*
+
+# --- 运行时数据 ---
+real/audit.jsonl
+real/audit.jsonl.*
+audit.jsonl
+audit.jsonl.*
+real/data/*.json
+
+# --- 交付物 / 冻结快照（git tag 才是权威版本锚点）---
+dist/
+*.tar.gz
+*.zip
+handoff/
+
+# --- WorkBuddy 本地会话数据（含个人记忆，不删除、仅不入库）---
+.workbuddy/
+
+# --- 脱敏词表（本地可选，含真实口令字面串，绝不入库）---
+deploy/redact-words.local.txt
+
+# --- 编辑器 / 系统 ---
+.DS_Store
+Thumbs.db
+*.swp
+*~
+__pycache__/
+*.py[cod]
+node_modules/

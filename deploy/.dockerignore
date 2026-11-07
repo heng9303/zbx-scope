@@ -1,0 +1,22 @@
+# 凭据与运行产物绝不能进入构建上下文
+config.json
+config.*.json
+!config.docker.example.json
+audit.jsonl
+audit.*.jsonl
+data/
+
+# 测试与文档不需要进镜像
+tests/
+docs/
+handoff/
+*.md
+!.dockerignore
+
+# 系统垃圾
+.DS_Store
+__MACOSX
+*.bak
+*.zip
+*.pyc
+__pycache__/
